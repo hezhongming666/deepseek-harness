@@ -37,7 +37,9 @@ export const inject = ['tools', 'systemPrompt', 'llm']
 
 /** One generation target in the ordered fallback chain. */
 export interface ModelTarget {
+  /** Provider id resolved through the LLM seam. */
   provider: string
+  /** Model name for the provider. */
   model: string
 }
 

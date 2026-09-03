@@ -2004,6 +2004,21 @@
       "doc": "docs/subsystems/spec-loop.md",
       "symbol": "AdapterRunOutcome",
       "source": "packages/spec-loop/spec-loop/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/vision.md",
+      "symbol": "VisionUnderstandRequest",
+      "source": "packages/vision/vision/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/vision.md",
+      "symbol": "VisionUnderstandResult",
+      "source": "packages/vision/vision/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/vision.md",
+      "symbol": "VisionProvider",
+      "source": "packages/vision/vision/src/types.ts"
     }
   ]
 }

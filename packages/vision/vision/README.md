@@ -1,19 +1,25 @@
 # `@deepseek-ai/dsh-vision`
 
-图片理解 capability seam（`ctx.vision`）：provider 注册表 + 与注册顺序无关的选择语义 + 请求/结果词汇表 + `VisionError` 错误分类。
+English | [中文](README.zh.md)
 
-## 配置
+Image-understanding capability seam (`ctx.vision`): the provider registry, order-independent selection semantics, the request/result vocabulary, and the `VisionError` failure taxonomy.
 
-| 字段 | 默认 | 说明 |
+## Configuration
+
+| Field | Default | Meaning |
 | --- | --- | --- |
-| `provider` | 自动选择 | 显式指定 provider id；`$DSH_VISION_PROVIDER` 等价覆盖 |
+| `provider` | auto-selected | Explicit provider id; `$DSH_VISION_PROVIDER` is an equivalent override |
 
-选择语义在执行时解析：配置 id 未注册 → `VISION_PROVIDER_CONFIGURED_MISSING`；注册但不可用 → `VISION_PROVIDER_CONFIGURED_UNAVAILABLE`；未配置且唯一可用 → 自动选；多个可用 → `VISION_PROVIDER_AMBIGUOUS`；无可用 → `VISION_PROVIDER_UNAVAILABLE`。
+Selection resolves at execution time: configured id not registered → `VISION_PROVIDER_CONFIGURED_MISSING`; registered but unavailable → `VISION_PROVIDER_CONFIGURED_UNAVAILABLE`; not configured and exactly one available → auto-selected; several available → `VISION_PROVIDER_AMBIGUOUS`; none available → `VISION_PROVIDER_UNAVAILABLE`.
 
 ## Model Experience
 
-该 seam 本身不面向模型；`@deepseek-ai/dsh-tool-vision` 把它包装成 `understand_image` 工具。每次调用消费一次视觉模型请求，结果经 `maxOutputChars` 在服务层裁剪。
+Indirectly, through `dsh-tool-vision`, which wraps this seam as the `understand_image` tool; each call consumes one vision model request, and the result is truncated at the service layer by `maxOutputChars`.
+
+#### KV Cache effect
+
+Independent — this package issues no model requests of its own; the provider's request goes out only when the tool executes.
 
 ## Known Limitations and Deferred Work
 
-- 图片输入仅接受 `http(s)` URL 或 `data:` URI；本地文件路径由 Consumer 用 `ctx.fs` 解析（当前 `dsh-tool-vision` 未实现，属其已知限制）。
+- Image inputs accept only `http(s)` URLs or `data:` URIs; local file paths are resolved by the Consumer through `ctx.fs` (not implemented in `dsh-tool-vision` today — its own known limitation).

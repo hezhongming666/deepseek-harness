@@ -1,4 +1,6 @@
-# Vision packages
+# vision/ — image-understanding capability family
+
+English | [中文](README.zh.md)
 
 Image-understanding capability family: the abstract `ctx.vision` seam, an OpenAI-compatible provider, and the model-facing `understand_image` tool.
 
@@ -8,9 +10,9 @@ Image-understanding capability family: the abstract `ctx.vision` seam, an OpenAI
 | [`@deepseek-ai/dsh-vision-openai`](vision-openai/README.md) | — (registers into `ctx.vision`) | Provider: OpenAI-compatible multimodal `chat/completions`, redirects refused |
 | [`@deepseek-ai/dsh-tool-vision`](tool-vision/README.md) | — (registers on `ctx.tools`) | Consumer: the `understand_image` tool |
 
-## 启用（opt-in）
+## Opt-in enablement
 
-图片理解需要视觉 API 密钥，因此不作为 shipped 默认，而是在你的 profile `cordis.patch.yml` 里按需插入这三行：
+Image understanding needs a vision API key, so it is not a shipped default; insert these three entries into your profile `cordis.patch.yml` instead:
 
 ```yaml
 - id: vision
@@ -20,10 +22,10 @@ Image-understanding capability family: the abstract `ctx.vision` seam, an OpenAI
 - id: vision-openai
   name: '@deepseek-ai/dsh-vision-openai'
   config:
-    baseUrl: https://api.openai.com/v1   # 可换成任意 OpenAI 兼容端点
-    model: gpt-4o                        # 可换成 qwen-vl-max 等
+    baseUrl: https://api.openai.com/v1   # swap for any OpenAI-compatible endpoint
+    model: gpt-4o                        # swap for qwen-vl-max etc.
 - id: tool-vision
   name: '@deepseek-ai/dsh-tool-vision'
 ```
 
-密钥通过环境变量 `DSH_VISION_API_KEY` 提供（或在 `config.apiKey` 里内联，不推荐）。未提供密钥时 provider 处于不可用状态，`understand_image` 调用在运行时结构化报错，不影响其它能力。
+Provide the key through the `DSH_VISION_API_KEY` environment variable (or inline in `config.apiKey`, not recommended). Without a key the provider stays unavailable, and `understand_image` calls fail with a structured error at runtime without affecting other capabilities.

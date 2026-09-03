@@ -566,6 +566,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Provider registration and selection plus normalized query execution over exactly four operations; the seam offers no protocol escape hatch, so a backend translates into the normalized request and result.',
   },
   {
+    key: 'vision',
+    pkg: 'vision',
+    title: 'Image-understanding provider seam',
+    mode: 'seam',
+    implementations: ['vision-openai'],
+    consumers: ['tool-vision'],
+    note: 'One provider registry per context with execution-time selection that never depends on registration order; the OpenAI-compatible provider implements multimodal chat/completions, and the tool-vision consumer exposes the model-facing understand_image tool.',
+  },
+  {
     key: 'apiProxy',
     pkg: 'apiproxy',
     title: 'Host API dispatch',

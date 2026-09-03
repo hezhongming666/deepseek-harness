@@ -1626,6 +1626,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'specLoopAdapter',
+    summary: 'The adapter contract one industrial-software integration implements.',
+    description: 'The adapter contract one industrial-software integration implements. Both methods are per-call operations; implementations keep no job state between calls and honor the request signal in `run` (H-3).',
+    methods: [
+      {
+        signature: 'abstract validate(params: SpecLoopParams): Promise<ValidationOutcome>',
+        description: 'Cheap feasibility pre-check (S-7 dry-run): reject infeasible parameters without consuming license or resources.',
+        parameters: [{ name: 'params', description: 'the candidate parameter set.' }],
+        returns: 'the S1 gate outcome.',
+      },
+      {
+        signature: 'abstract run(request: AdapterRunRequest): Promise<AdapterRunOutcome>',
+        description: 'Execute one candidate through the software and return the structured outcome (S-5). Solver divergence and infrastructure failures are outcome statuses, never thrown exceptions.',
+        parameters: [{ name: 'request', description: 'the candidate plus the cancellation signal.' }],
+        returns: 'the run outcome.',
+      },
+    ],
+  },
+  {
     key: 'spillStore',
     summary: 'Abstract spill storage service.',
     description: 'Abstract spill storage service. Subclass, implement saveText, and load the subclass as a plugin — it registers as `ctx.spillStore` (one implementation per context; loading a second throws, cordis\' standard duplicate-service behavior).\n\nSemantics every implementation must honor:\n\n- saveText persists the FULL `content` verbatim and returns an opaque locator, exact byte length, and model-facing retrieval guidance.\n- Storage is scoped by the request\'s SaveTextSpill.owner session; the backend chooses a private (not world-readable) location and a collision-free name derived from — never equal to — the caller\'s `suggestedName`.\n- `saveText` REJECTS on a real storage failure (permissions, ENOSPC, backend unavailable); the caller decides how to degrade (the spill policy treats a rejection as best-effort and keeps the inline result).',
@@ -2131,6 +2150,25 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'request', description: 'Questions, owner agent, and abort signal.' }],
         returns: 'The answer chosen or typed by the human.',
         throws: ['{UserQuestionError} code `CALLER_NOT_LIVE` when a supplied agent is not the registry\'s exact live instance, or `DELEGATED_CALLER` when that live agent is owned by another agent.'],
+      },
+    ],
+  },
+  {
+    key: 'vision',
+    summary: 'The image-understanding service.',
+    description: 'The image-understanding service. Registered as `ctx.vision` (one instance per context).\n\nSelection semantics (resolved at execution time, never order-dependent):\n\n- A configured id that is registered and `available()` → that provider.\n- A configured id not registered → `VISION_PROVIDER_CONFIGURED_MISSING`.\n- A configured id registered but unavailable → `VISION_PROVIDER_CONFIGURED_UNAVAILABLE`.\n- No id configured, exactly one registered usable provider → that provider.\n- No id configured, multiple usable providers → `VISION_PROVIDER_AMBIGUOUS`.\n- No id configured, no usable provider → `VISION_PROVIDER_UNAVAILABLE`.',
+    methods: [
+      {
+        signature: 'registerProvider(provider: VisionProvider): () => void',
+        description: 'Register a vision provider. Throws VisionError `VISION_DUPLICATE_PROVIDER` if its id is already registered. Returns a disposer; disposed with the calling fiber.',
+        parameters: [{ name: 'provider', description: 'the provider; its `id` is the registry key.' }],
+        returns: 'the disposer that unregisters the provider.',
+      },
+      {
+        signature: 'async understand(request: VisionUnderstandRequest, signal?: AbortSignal): Promise<VisionUnderstandResult>',
+        description: 'Run one image-understanding request through the selected provider. Resolves the provider at call time with the selection rules above; throws VisionError when the capability cannot run. The seam enforces `request.maxOutputChars` on the result: if the provider over-returns, `content` is truncated and `truncated` set.',
+        parameters: [{ name: 'request', description: 'the image reference plus optional prompt and output bound.' }, { name: 'signal', description: 'optional cancellation signal forwarded to the provider.' }],
+        returns: 'the provider\'s result, capped to `request.maxOutputChars`.',
       },
     ],
   },
@@ -2721,8 +2759,24 @@ export const EVENT_API: readonly EventApiEntry[] = [
 /** Shapes of every exported type the Service and Event signatures reference (transitively), sorted by name. */
 export const TYPE_API: readonly TypeApiEntry[] = [
   {
+    name: 'AdapterEnvironment',
+    declaration: 'export interface AdapterEnvironment {\n    softwareVersion?: string;\n    solverVersion?: string;\n    licenseServerVersion?: string;\n    osKernel?: string;\n}',
+  },
+  {
     name: 'AdapterRegistrationHandle',
     declaration: 'export interface AdapterRegistrationHandle {\n    (): void;\n    replace(providers: string[]): void;\n}',
+  },
+  {
+    name: 'AdapterRunOutcome',
+    declaration: 'export interface AdapterRunOutcome {\n    status: AdapterRunStatus;\n    result?: SpecLoopMetrics;\n    licenseMs?: number;\n    error?: string;\n    environment?: AdapterEnvironment;\n}',
+  },
+  {
+    name: 'AdapterRunRequest',
+    declaration: 'export interface AdapterRunRequest {\n    params: SpecLoopParams;\n    signal?: AbortSignal;\n}',
+  },
+  {
+    name: 'AdapterRunStatus',
+    declaration: 'export type AdapterRunStatus = \'success\' | \'diverged\' | \'infrastructure\' | \'killed\';',
   },
   {
     name: 'Agent',
@@ -4209,6 +4263,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SpawnTeammateResult {\n    readonly member: TeamMemberView;\n}',
   },
   {
+    name: 'SpecLoopJson',
+    declaration: 'export type SpecLoopJson = null | boolean | number | string | SpecLoopJson[] | {\n    [key: string]: SpecLoopJson;\n};',
+  },
+  {
+    name: 'SpecLoopMetrics',
+    declaration: 'export type SpecLoopMetrics = {\n    [key: string]: SpecLoopJson;\n};',
+  },
+  {
+    name: 'SpecLoopParams',
+    declaration: 'export type SpecLoopParams = {\n    [key: string]: SpecLoopJson;\n};',
+  },
+  {
     name: 'SpillLocator',
     declaration: 'export type SpillLocator = Branded<\'SpillLocator\'>;',
   },
@@ -4715,6 +4781,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'UserQuestionProvider',
     declaration: 'export interface UserQuestionProvider {\n    ask(request: AskUserQuestionRequest): Promise<AskUserQuestionAnswer>;\n}',
+  },
+  {
+    name: 'ValidationOutcome',
+    declaration: 'export interface ValidationOutcome {\n    ok: boolean;\n    reasons: string[];\n}',
+  },
+  {
+    name: 'VisionProvider',
+    declaration: 'export interface VisionProvider {\n    readonly id: string;\n    available(): boolean;\n    understand(request: VisionUnderstandRequest, signal?: AbortSignal): Promise<VisionUnderstandResult>;\n}',
+  },
+  {
+    name: 'VisionUnderstandRequest',
+    declaration: 'export interface VisionUnderstandRequest {\n    readonly image: string;\n    readonly prompt?: string;\n    readonly maxOutputChars?: number;\n}',
+  },
+  {
+    name: 'VisionUnderstandResult',
+    declaration: 'export interface VisionUnderstandResult {\n    readonly content: string;\n    readonly truncated: boolean;\n}',
   },
   {
     name: 'WebBootEntry',

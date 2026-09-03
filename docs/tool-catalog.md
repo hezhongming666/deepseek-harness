@@ -33,6 +33,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`, `ctx.workflowEngine`, `ctx.subagents`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents every fresh round)` | `tool/call`, `tool/result`, `workflow and child session events during execution` | - | A fixed foreground workflow starts one fresh structured child per round; the model selects only the immutable objective and an optional round cap. |
 | `@deepseek-ai/dsh-tool-skill` | `skill` | `ctx.tools`, `ctx.agents`, `ctx.skills` | `tool/call`, `tool/result`, `user/message replacement catalogs via agent.inject()` | - | - |
 | `@deepseek-ai/dsh-tool-spec-loop` | `spec_loop` | `ctx.tools`, `ctx.specLoopAdapter`, `ctx.systemPrompt`, `ctx.llm for candidate generation` | `tool/call`, `tool/result`, `independent LLM generation requests during execution` | - | One call runs the complete deterministic loop over the mounted adapter; the model supplies only the spec contract and an optional starting candidate. Generation goes through the LLM seam with the configured multi-model fallback chain. |
+| `@deepseek-ai/dsh-tool-vision` | `understand_image` | `ctx.tools`, `ctx.vision`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `independent vision model requests during execution` | - | Provider selection stays behind ctx.vision so the model-visible schema stays stable across providers; a local image path resolves through the optional filesystem into a data URI. |
 | `@deepseek-ai/dsh-tool-session-query` | `session_event_read`, `session_event_search`, `session_event_trace`, `session_search`, `session_trace` | `ctx.tools`, `ctx.systemPrompt`, `ctx.sessionQuery`, `a calling Agent for workspace authority` | `tool/call`, `tool/result` | - | The five read-only tools hide provider cursors and authorize every result from the immutable calling agent session. The package is opt-in; compositions that need enforced deadlines or bounded inline output also mount the generic timeout or spill policies. |
 | `@deepseek-ai/dsh-tool-subagent` | `subagent` | `ctx.tools`, `ctx.subagents`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `child session events through the chosen provider` | `subagent`, `subagent_fork` | The registered tool name is the load-time `toolName` config (default `subagent`); the schema above is that default. The shipped compositions load this package once per subagent backend, so the model additionally sees `subagent_fork` bound to the fork backend. Each instance's description, `run_in_background` parameter, and system-prompt policy follow its own `backgroundMode` and `enableRunInBackground`, so the two shipped schemas are not identical: `subagent` is `continuable` and defaults omitted calls to background with automatic settlement delivery, while `subagent_fork` stays `one-shot` and defaults them to foreground — see `packages/bundle/base/cordis.patch.yml` and `examples/acp-agent/cordis.yml`. |
 | `@deepseek-ai/dsh-tool-subagent-control` | `interrupt_agent`, `list_agents`, `send_message` | `ctx.tools`, `ctx.subagents`, `ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`, `tool/result`, `child session events through ctx.subagents` | - | The globally named control tools over continuable background subagents: provider-bound `tool-subagent` instances register distinct delegation tools, while this package registers `send_message` and `interrupt_agent` once, plus `list_agents` from its separately loaded `/list-agents` plugin (whose catalog rows use the sessionProjections and live Agent registries). |
@@ -1291,6 +1292,37 @@ Run a deterministic spec loop: iterate candidate parameters against a spec contr
 Source: [`packages/spec-loop/tool-spec-loop/src/index.ts`](../packages/spec-loop/tool-spec-loop/src/index.ts)
 
 One call runs the complete deterministic loop over the mounted adapter; the model supplies only the spec contract and an optional starting candidate. Generation goes through the LLM seam with the configured multi-model fallback chain.
+
+<a id="deepseek-aidsh-tool-vision"></a>
+
+## `@deepseek-ai/dsh-tool-vision`
+
+### `understand_image`
+
+Understand the content of an image. The image argument accepts an http(s) URL, a data: URI, or a local image path (resolved via the filesystem capability); optionally pass a prompt to ask a specific question about the image.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "image": {
+      "type": "string",
+      "description": "Image reference: an http(s) URL, a data: URI, or a local image path."
+    },
+    "prompt": {
+      "type": "string",
+      "description": "Optional question or instruction about the image."
+    }
+  },
+  "required": [
+    "image"
+  ]
+}
+```
+
+Source: [`packages/vision/tool-vision/src/index.ts`](../packages/vision/tool-vision/src/index.ts)
+
+Provider selection stays behind ctx.vision so the model-visible schema stays stable across providers; a local image path resolves through the optional filesystem into a data URI.
 
 <a id="deepseek-aidsh-tool-session-query"></a>
 

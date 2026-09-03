@@ -1,19 +1,33 @@
 # `@deepseek-ai/dsh-tool-vision`
 
-模型工具 `understand_image`，走 `ctx.vision`。本包只负责 schema、参数校验、输出上限与渲染，不负责 provider 选择或网络访问。
+English | [中文](README.zh.md)
 
-## 配置
+Model-facing `understand_image` tool over `ctx.vision`. This package owns the schema, argument validation, the output bound, and rendering — never provider selection or network access.
 
-| 字段 | 默认 | 说明 |
+## Configuration
+
+| Field | Default | Meaning |
 | --- | --- | --- |
-| `enabled` | `true` | 是否注册 `understand_image` |
-| `timeoutMs` | `60000` | 协作式超时预算（挂在 `ToolDefinition.timeoutMs` 上） |
-| `maxOutputChars` | `4000` | 返回文本上限（服务层裁剪） |
+| `enabled` | `true` | Whether to register `understand_image` |
+| `timeoutMs` | `60000` | Cooperative timeout budget (carried on `ToolDefinition.timeoutMs`) |
+| `maxOutputChars` | `4000` | Returned-text cap (service-layer truncation) |
 
 ## Model Experience
 
-`understand_image` 的 `image` 接受 `http(s)` URL、`data:` URI 或本地图片路径（经 `ctx.fs` 解析为 data URI，上限 5 MB），可选 `prompt` 提具体问题；返回 `{ content }` 文本。每次调用消费一次视觉模型请求。
+### `understand_image` tool schema
+
+#### What the model sees
+
+The `understand_image` schema and description in the generated [tool catalog](../../../docs/tool-catalog.md#deepseek-aidsh-tool-vision). `image` accepts an `http(s)` URL, a `data:` URI, or a local image path resolved through `ctx.fs` into a data URI (capped at 5 MB); the optional `prompt` asks a specific question; the result is `{ content }` text.
+
+#### Token effect
+
+Conditional — the schema text is a fixed per-composition cost; each call additionally pays the rendered result truncated by `maxOutputChars`.
+
+#### KV Cache effect
+
+Append-only — the schema contributes a fixed stable prefix; it does not invalidate an already-reusable prompt prefix.
 
 ## Known Limitations and Deferred Work
 
-- 本地路径仅按扩展名推断 mime（PNG/JPEG/WebP/GIF）；未做 magic-byte 校验，远程引用的格式校验由 provider 负责。
+- Local paths infer the mime type by extension only (PNG/JPEG/WebP/GIF); bytes are not magic-validated, and remote references leave format validation to the provider.

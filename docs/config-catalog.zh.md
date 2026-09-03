@@ -2732,6 +2732,44 @@ export interface Config {
 
 来源：[`packages/skill/tool-skill/src/index.ts:61`](../packages/skill/tool-skill/src/index.ts)
 
+<a id="deepseek-aidsh-tool-spec-loop"></a>
+
+## `@deepseek-ai/dsh-tool-spec-loop`
+
+需要：`tools` · `systemPrompt` · `llm`
+
+```ts config-catalog
+/** Deployment configuration for the spec-loop tool. */
+export interface Config {
+  /** Ordered generation fallback chain; a later entry runs only after every earlier one failed. */
+  models: ModelTarget[]
+  /** Deployment ceiling for one run's iteration count (default 256). */
+  maxIterations?: number
+  /** Deployment ceiling for one run's wall-clock budget in milliseconds (default 3_600_000). */
+  maxWallClockMs?: number
+  /** Deployment ceiling for one run's billed generation tokens (default 200_000). */
+  maxTokens?: number
+  /** Output cap for one generation call (default 4096). */
+  maxGenerationTokens?: number
+  /** How many prior iteration records the next generation prompt embeds (default 16). */
+  maxHistoryRecords?: number
+  /** Serialized-character cap for one embedded record's params (default 2048). */
+  maxParamsChars?: number
+  /** Rendered-report character cap (default 16384). */
+  maxResultChars?: number
+}
+
+/** One generation target in the ordered fallback chain. */
+export interface ModelTarget {
+  /** Provider id resolved through the LLM seam. */
+  provider: string
+  /** Model name for the provider. */
+  model: string
+}
+```
+
+来源：[`packages/spec-loop/tool-spec-loop/src/index.ts:47`](../packages/spec-loop/tool-spec-loop/src/index.ts)
+
 <a id="deepseek-aidsh-tool-str-replace-editor"></a>
 
 ## `@deepseek-ai/dsh-tool-str-replace-editor`
@@ -2877,6 +2915,26 @@ export interface Config {
 
 来源：[`packages/todo/tool-todo/src/index.ts:29`](../packages/todo/tool-todo/src/index.ts)
 
+<a id="deepseek-aidsh-tool-vision"></a>
+
+## `@deepseek-ai/dsh-tool-vision`
+
+需要：`tools` · `vision` · `systemPrompt`
+
+```ts config-catalog
+/** Plugin config: whether to register the tool, plus its timeout and output caps. */
+export interface Config {
+  /** Register `understand_image`. Defaults to true. */
+  enabled?: boolean
+  /** Cooperative timeout budget (ms) for `understand_image`. Defaults to 60000. */
+  timeoutMs?: number
+  /** Upper bound on returned characters. Defaults to 4000. */
+  maxOutputChars?: number
+}
+```
+
+来源：[`packages/vision/tool-vision/src/index.ts:33`](../packages/vision/tool-vision/src/index.ts)
+
 <a id="deepseek-aidsh-tool-web"></a>
 
 ## `@deepseek-ai/dsh-tool-web`
@@ -3005,6 +3063,46 @@ export type ApprovalPolicy = 'ask' | 'never'
 ```
 
 来源：[`packages/interaction/user-approval/src/index.ts:177`](../packages/interaction/user-approval/src/index.ts)
+
+<a id="deepseek-aidsh-vision"></a>
+
+## `@deepseek-ai/dsh-vision`
+
+```ts config-catalog
+/**
+ * Config for the vision seam. `provider` pins which provider wins; it is
+ * optional (a single registered usable provider auto-selects). Operational
+ * overrides feed the same field rather than introduce a hidden priority chain.
+ */
+export interface VisionRuntimeConfig {
+  /** Explicit provider id. Omitted = auto-select when exactly one usable. */
+  readonly provider?: string
+}
+```
+
+来源：[`packages/vision/vision/src/index.ts:47`](../packages/vision/vision/src/index.ts)
+
+<a id="deepseek-aidsh-vision-openai"></a>
+
+## `@deepseek-ai/dsh-vision-openai`
+
+需要：`vision`
+
+```ts config-catalog
+/** Plugin config: the provider's endpoint, model, credential, and timeout (all defaulted). */
+export interface Config {
+  /** Bearer API key. Empty = provider unavailable; `$DSH_VISION_API_KEY` is a fallback. */
+  apiKey?: string
+  /** OpenAI-compatible base URL. */
+  baseUrl?: string
+  /** Vision model name. */
+  model?: string
+  /** Request timeout in milliseconds. */
+  timeoutMs?: number
+}
+```
+
+来源：[`packages/vision/vision-openai/src/index.ts:29`](../packages/vision/vision-openai/src/index.ts)
 
 <a id="deepseek-aidsh-web"></a>
 
@@ -3311,6 +3409,7 @@ export interface Config {
 - `@deepseek-ai/dsh-sdk-protocol`（[`packages/sdk/protocol/src/index.ts`](../packages/sdk/protocol/src/index.ts)）
 - `@deepseek-ai/dsh-session-telemetry`（[`packages/session/session-telemetry/src/index.ts`](../packages/session/session-telemetry/src/index.ts)）
 - `@deepseek-ai/dsh-session-title-llm`（[`packages/session/session-title-llm/src/index.ts`](../packages/session/session-title-llm/src/index.ts)）
+- `@deepseek-ai/dsh-spec-loop`（[`packages/spec-loop/spec-loop/src/index.ts`](../packages/spec-loop/spec-loop/src/index.ts)）
 - `@deepseek-ai/dsh-subagent-in-process-driver`（[`packages/subagent/subagent-in-process-driver/src/index.ts`](../packages/subagent/subagent-in-process-driver/src/index.ts)）
 - `@deepseek-ai/dsh-timeout`（[`packages/util/timeout/src/index.ts`](../packages/util/timeout/src/index.ts)）
 - `@deepseek-ai/dsh-typert-generator`（[`packages/typert/generator/src/index.ts`](../packages/typert/generator/src/index.ts)）

@@ -28,7 +28,11 @@ const IMAGE_MIME_BY_EXT: Readonly<Record<string, string>> = {
   '.gif': 'image/gif',
 }
 
-/** Map a path to its declared image media type by extension. */
+/**
+ * Map a path to its declared image media type by extension.
+ * @param filePath - local path whose extension selects the media type.
+ * @returns the media type for a supported extension, or `undefined` for unknown ones.
+ */
 export function mimeTypeForImagePath(filePath: string): string | undefined {
   return IMAGE_MIME_BY_EXT[extname(filePath).toLowerCase()]
 }

@@ -70,6 +70,9 @@ import * as ToolWorkflow from '@deepseek-ai/dsh-tool-workflow'
 import { SpecLoopAdapterService } from '@deepseek-ai/dsh-spec-loop'
 import type { AdapterRunOutcome, AdapterRunRequest, ValidationOutcome } from '@deepseek-ai/dsh-spec-loop'
 import * as ToolSpecLoop from '@deepseek-ai/dsh-tool-spec-loop'
+import VisionRuntime from '@deepseek-ai/dsh-vision'
+import type { VisionProvider, VisionUnderstandRequest, VisionUnderstandResult } from '@deepseek-ai/dsh-vision'
+import * as ToolVision from '@deepseek-ai/dsh-tool-vision'
 import { githubSlug } from './verify-md-links.ts'
 
 /** Attachment seam marker that makes the attachments-conditional `read_image` schema harvestable. */
@@ -104,6 +107,19 @@ class CatalogSpecLoopAdapter extends SpecLoopAdapterService {
 
   override run(_request: AdapterRunRequest): Promise<AdapterRunOutcome> {
     return Promise.reject(new Error('gen-tool-catalog: spec-loop runs are unreachable during schema harvest'))
+  }
+}
+
+/** Vision provider marker: schema harvest never runs an understanding request. */
+class CatalogVisionProvider implements VisionProvider {
+  readonly id = 'catalog'
+
+  available(): boolean {
+    return true
+  }
+
+  understand(_request: VisionUnderstandRequest): Promise<VisionUnderstandResult> {
+    return Promise.reject(new Error('gen-tool-catalog: vision understanding is unreachable during schema harvest'))
   }
 }
 
@@ -466,6 +482,22 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'One call runs the complete deterministic loop over the mounted adapter; the model supplies only the spec contract and an optional starting candidate. Generation goes through the LLM seam with the configured multi-model fallback chain.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-vision',
+    dir: 'tool-vision',
+    source: 'packages/vision/tool-vision/src/index.ts',
+    requires: ['ctx.tools', 'ctx.vision', 'ctx.systemPrompt'],
+    writes: ['tool/call', 'tool/result', 'independent vision model requests during execution'],
+    async mount(ctx) {
+      // Mount the catalog provider so understand_image registers; its schema
+      // does not depend on provider identity or availability.
+      await ctx.plugin(VisionRuntime)
+      await ctx.plugin(CatalogVisionProvider)
+      await ctx.plugin(ToolVision)
+    },
+    note:
+      'Provider selection stays behind ctx.vision so the model-visible schema stays stable across providers; a local image path resolves through the optional filesystem into a data URI.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-session-query',

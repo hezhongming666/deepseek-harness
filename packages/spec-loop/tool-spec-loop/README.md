@@ -1,5 +1,7 @@
 # @deepseek-ai/dsh-tool-spec-loop
 
+English | [中文](README.zh.md)
+
 Model-facing `spec_loop` tool over the [`dsh-spec-loop`](../spec-loop/README.md) engine and adapter seam. One call runs the complete deterministic parameter-search loop: multi-model generation fallback, envelope and validation gating, monotonic repair, failure classification, and cost caps. The engine owns loop bookkeeping; this package owns generation, deployment ceilings, and the model-facing surface.
 
 ## Configuration

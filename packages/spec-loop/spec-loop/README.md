@@ -1,5 +1,7 @@
 # @deepseek-ai/dsh-spec-loop
 
+English | [中文](README.zh.md)
+
 The deterministic spec-loop core: a bounded, replayable candidate-search engine over a spec contract, plus the adapter seam industrial-software integrations implement. Model-facing behavior lives in [`dsh-tool-spec-loop`](../tool-spec-loop/README.md).
 
 ## The engine
@@ -37,7 +39,7 @@ Providers report solver and infrastructure failures through outcome statuses, ne
 
 Indirectly, through `dsh-tool-spec-loop`, which registers the `spec_loop` tool, its system-prompt section, and its rendered reports; this package registers no prompt, schema, or result of its own.
 
-### KV Cache effect
+#### KV Cache effect
 
 Independent — this package issues no model requests.
 
