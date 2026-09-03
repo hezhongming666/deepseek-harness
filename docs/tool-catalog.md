@@ -32,6 +32,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-lsp` | `lsp` | `ctx.tools`, `ctx.lsp`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | The lsp tool keeps provider selection and language-server subprocesses behind ctx.lsp, so its model-visible schema stays stable across providers. Requires a registered provider (e.g. `@deepseek-ai/dsh-lsp-stdio`) at runtime; without one, a query returns the structured `LSP_UNAVAILABLE` error rather than changing the schema. |
 | `@deepseek-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`, `ctx.workflowEngine`, `ctx.subagents`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents every fresh round)` | `tool/call`, `tool/result`, `workflow and child session events during execution` | - | A fixed foreground workflow starts one fresh structured child per round; the model selects only the immutable objective and an optional round cap. |
 | `@deepseek-ai/dsh-tool-skill` | `skill` | `ctx.tools`, `ctx.agents`, `ctx.skills` | `tool/call`, `tool/result`, `user/message replacement catalogs via agent.inject()` | - | - |
+| `@deepseek-ai/dsh-tool-spec-loop` | `spec_loop` | `ctx.tools`, `ctx.specLoopAdapter`, `ctx.systemPrompt`, `ctx.llm for candidate generation` | `tool/call`, `tool/result`, `independent LLM generation requests during execution` | - | One call runs the complete deterministic loop over the mounted adapter; the model supplies only the spec contract and an optional starting candidate. Generation goes through the LLM seam with the configured multi-model fallback chain. |
 | `@deepseek-ai/dsh-tool-session-query` | `session_event_read`, `session_event_search`, `session_event_trace`, `session_search`, `session_trace` | `ctx.tools`, `ctx.systemPrompt`, `ctx.sessionQuery`, `a calling Agent for workspace authority` | `tool/call`, `tool/result` | - | The five read-only tools hide provider cursors and authorize every result from the immutable calling agent session. The package is opt-in; compositions that need enforced deadlines or bounded inline output also mount the generic timeout or spill policies. |
 | `@deepseek-ai/dsh-tool-subagent` | `subagent` | `ctx.tools`, `ctx.subagents`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `child session events through the chosen provider` | `subagent`, `subagent_fork` | The registered tool name is the load-time `toolName` config (default `subagent`); the schema above is that default. The shipped compositions load this package once per subagent backend, so the model additionally sees `subagent_fork` bound to the fork backend. Each instance's description, `run_in_background` parameter, and system-prompt policy follow its own `backgroundMode` and `enableRunInBackground`, so the two shipped schemas are not identical: `subagent` is `continuable` and defaults omitted calls to background with automatic settlement delivery, while `subagent_fork` stays `one-shot` and defaults them to foreground — see `packages/bundle/base/cordis.patch.yml` and `examples/acp-agent/cordis.yml`. |
 | `@deepseek-ai/dsh-tool-subagent-control` | `interrupt_agent`, `list_agents`, `send_message` | `ctx.tools`, `ctx.subagents`, `ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`, `tool/result`, `child session events through ctx.subagents` | - | The globally named control tools over continuable background subagents: provider-bound `tool-subagent` instances register distinct delegation tools, while this package registers `send_message` and `interrupt_agent` once, plus `list_agents` from its separately loaded `/list-agents` plugin (whose catalog rows use the sessionProjections and live Agent registries). |
@@ -1261,6 +1262,35 @@ Load the full instructions for an available skill. Call this with the exact skil
 ```
 
 Source: [`packages/skill/tool-skill/src/index.ts`](../packages/skill/tool-skill/src/index.ts)
+
+<a id="deepseek-aidsh-tool-spec-loop"></a>
+
+## `@deepseek-ai/dsh-tool-spec-loop`
+
+### `spec_loop`
+
+Run a deterministic spec loop: iterate candidate parameters against a spec contract (objective metric, assertions, budgets, repair policy) through the mounted spec-loop adapter, with multi-model generation fallback and monotonic repair, until the assertions pass or a budget, improvement, or infrastructure limit stops the run. The call returns the complete audit report: per-iteration verdicts (S0 assertion failures are repairable; S1 input-invalid, S2 divergence, and S3 infrastructure failures are classified separately), the best accepted parameters, and the cost totals. Use for bounded parameter search over software with a spec-loop adapter.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "spec": {
+      "description": "The full spec contract: { id, objective: { path, direction: \"minimize\"|\"maximize\" }, assertions: [{ id, path, predicate: \"lte\"|\"gte\"|\"between\", target }], budgets: { maxIterations, maxWallClockMs?, maxTokens? }, repair: { margin, maxNoImprovement, maxConsecutiveInfrastructure? }, envelope?: { bounds: { [path]: { min, max } } }, description? }."
+    },
+    "initialParams": {
+      "description": "Optional starting parameter set evaluated before any generation."
+    }
+  },
+  "required": [
+    "spec"
+  ]
+}
+```
+
+Source: [`packages/spec-loop/tool-spec-loop/src/index.ts`](../packages/spec-loop/tool-spec-loop/src/index.ts)
+
+One call runs the complete deterministic loop over the mounted adapter; the model supplies only the spec contract and an optional starting candidate. Generation goes through the LLM seam with the configured multi-model fallback chain.
 
 <a id="deepseek-aidsh-tool-session-query"></a>
 

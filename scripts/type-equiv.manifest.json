@@ -1964,6 +1964,46 @@
       "doc": "docs/subsystems/feedback.md",
       "symbol": "MessageFeedbackDeleteResult",
       "source": "packages/feedback/message-feedback/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/spec-loop.md",
+      "symbol": "SpecLoopJson",
+      "source": "packages/spec-loop/spec-loop/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/spec-loop.md",
+      "symbol": "SpecLoopParams",
+      "source": "packages/spec-loop/spec-loop/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/spec-loop.md",
+      "symbol": "SpecLoopMetrics",
+      "source": "packages/spec-loop/spec-loop/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/spec-loop.md",
+      "symbol": "ValidationOutcome",
+      "source": "packages/spec-loop/spec-loop/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/spec-loop.md",
+      "symbol": "AdapterRunRequest",
+      "source": "packages/spec-loop/spec-loop/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/spec-loop.md",
+      "symbol": "AdapterRunStatus",
+      "source": "packages/spec-loop/spec-loop/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/spec-loop.md",
+      "symbol": "AdapterEnvironment",
+      "source": "packages/spec-loop/spec-loop/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/spec-loop.md",
+      "symbol": "AdapterRunOutcome",
+      "source": "packages/spec-loop/spec-loop/src/types.ts"
     }
   ]
 }

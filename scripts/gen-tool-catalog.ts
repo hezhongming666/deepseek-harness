@@ -10,6 +10,7 @@ import { globSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, resolve } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import type { ToolSchema } from '@deepseek-ai/dsh-llm'
+import LlmRuntime from '@deepseek-ai/dsh-llm'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createScope } from '@deepseek-ai/dsh-scope'
@@ -66,6 +67,9 @@ import * as ToolWeb from '@deepseek-ai/dsh-tool-web'
 import VmWorkflowEngine from '@deepseek-ai/dsh-workflow-worker-thread'
 import * as ToolRalph from '@deepseek-ai/dsh-tool-ralph'
 import * as ToolWorkflow from '@deepseek-ai/dsh-tool-workflow'
+import { SpecLoopAdapterService } from '@deepseek-ai/dsh-spec-loop'
+import type { AdapterRunOutcome, AdapterRunRequest, ValidationOutcome } from '@deepseek-ai/dsh-spec-loop'
+import * as ToolSpecLoop from '@deepseek-ai/dsh-tool-spec-loop'
 import { githubSlug } from './verify-md-links.ts'
 
 /** Attachment seam marker that makes the attachments-conditional `read_image` schema harvestable. */
@@ -89,6 +93,17 @@ class CatalogAttachmentStore extends AttachmentStore {
 
   override readImage(_ref: ImageAttachmentRef): Promise<StoredImageAttachment> {
     return Promise.reject(new Error('gen-tool-catalog: attachment reads are unreachable during schema harvest'))
+  }
+}
+
+/** Spec-loop adapter marker: schema harvest never submits or executes a job. */
+class CatalogSpecLoopAdapter extends SpecLoopAdapterService {
+  override validate(): Promise<ValidationOutcome> {
+    return Promise.reject(new Error('gen-tool-catalog: spec-loop validation is unreachable during schema harvest'))
+  }
+
+  override run(_request: AdapterRunRequest): Promise<AdapterRunOutcome> {
+    return Promise.reject(new Error('gen-tool-catalog: spec-loop runs are unreachable during schema harvest'))
   }
 }
 
@@ -437,6 +452,20 @@ const TOOL_PACKAGES: ToolPackage[] = [
       })
       await ctx.plugin(ToolSkill)
     },
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-spec-loop',
+    dir: 'tool-spec-loop',
+    source: 'packages/spec-loop/tool-spec-loop/src/index.ts',
+    requires: ['ctx.tools', 'ctx.specLoopAdapter', 'ctx.systemPrompt', 'ctx.llm for candidate generation'],
+    writes: ['tool/call', 'tool/result', 'independent LLM generation requests during execution'],
+    async mount(ctx) {
+      await ctx.plugin(LlmRuntime)
+      await ctx.plugin(CatalogSpecLoopAdapter)
+      await ctx.plugin(ToolSpecLoop, { models: [{ provider: 'catalog', model: 'catalog' }] })
+    },
+    note:
+      'One call runs the complete deterministic loop over the mounted adapter; the model supplies only the spec contract and an optional starting candidate. Generation goes through the LLM seam with the configured multi-model fallback chain.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-session-query',

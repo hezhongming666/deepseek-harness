@@ -548,6 +548,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'One engine per context, as in bash, with no named-provider registry; the general workflow and fixed Ralph consumers start runs whose agent() calls fan out through ctx.subagents.',
   },
   {
+    key: 'specLoopAdapter',
+    pkg: 'spec-loop',
+    title: 'Spec-loop software adapter seam',
+    mode: 'seam',
+    implementations: [],
+    consumers: ['tool-spec-loop'],
+    note: 'One deployment-owned adapter per context; industrial-software integrations implement validate (the cheap S1 gate) and run (execution with structured outcomes), and the deterministic spec-loop engine classifies each iteration.',
+  },
+  {
     key: 'lsp',
     pkg: 'lsp',
     title: 'Language-server navigation seam',
