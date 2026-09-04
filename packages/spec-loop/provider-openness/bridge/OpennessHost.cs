@@ -444,6 +444,14 @@ namespace OpennessBridge
             {
                 return RunGenerate(runId, session, parameters, cancelled);
             }
+            if (config.Action == "import")
+            {
+                return RunImport(runId, session, parameters, cancelled);
+            }
+            if (config.Action == "export")
+            {
+                return RunExport(runId, session, cancelled);
+            }
             var writeError = WriteStartValues(runId, session, parameters);
             if (writeError != null)
             {
@@ -797,6 +805,209 @@ namespace OpennessBridge
                 chars[index] = Array.IndexOf(invalid, value[index]) >= 0 ? '_' : value[index];
             }
             return new string(chars);
+        }
+
+        /// <summary>
+        /// The shipped import action: render the Openness-format XML template
+        /// with the candidate's numeric values, import it into the target
+        /// composition, then compile. Reports the compile fields plus the
+        /// imported target name.
+        /// </summary>
+        private Wire.RunResponse RunImport(
+            string runId,
+            Session session,
+            IReadOnlyDictionary<string, JsonElement> parameters,
+            Func<bool> cancelled)
+        {
+            var importConfig = config.Import;
+            var total = Stopwatch.StartNew();
+
+            string rendered;
+            try
+            {
+                rendered = RenderTemplate(importConfig.Source, parameters);
+            }
+            catch (Exception error)
+            {
+                return new Wire.RunResponse
+                {
+                    RunId = runId,
+                    Status = "diverged",
+                    Error = error.Message,
+                    Environment = session.Environment,
+                };
+            }
+            if (cancelled())
+            {
+                return new Wire.RunResponse { RunId = runId, Status = "killed", Error = "cancelled during execution" };
+            }
+
+            var tempPath = Path.Combine(
+                Path.GetTempPath(),
+                $"openness-bridge-import-{SanitizeFileToken(importConfig.Target)}-{SanitizeFileToken(runId)}.xml");
+            try
+            {
+                File.WriteAllText(tempPath, rendered);
+                ImportXml(session, importConfig.Target, tempPath);
+            }
+            catch (InfrastructureException)
+            {
+                throw;
+            }
+            catch (Exception error)
+            {
+                return new Wire.RunResponse
+                {
+                    RunId = runId,
+                    Status = "diverged",
+                    Error = $"import into {JsonSerializer.Serialize(importConfig.Target)} failed: {error.Message}",
+                    Environment = session.Environment,
+                };
+            }
+            finally
+            {
+                try
+                {
+                    File.Delete(tempPath);
+                }
+                catch
+                {
+                    // Best-effort temp-file cleanup.
+                }
+            }
+            if (cancelled())
+            {
+                return new Wire.RunResponse { RunId = runId, Status = "killed", Error = "cancelled during execution" };
+            }
+
+            var (failure, result, _) = CompileSoftware(runId, session, cancelled);
+            if (failure != null)
+            {
+                return failure;
+            }
+            result!["importedTarget"] = JsonSerializer.SerializeToElement(importConfig.Target);
+            total.Stop();
+            return new Wire.RunResponse
+            {
+                RunId = runId,
+                Status = "success",
+                Result = result,
+                LicenseMs = total.ElapsedMilliseconds,
+                Environment = session.Environment,
+            };
+        }
+
+        /// <summary>
+        /// Import the Openness XML into the target composition. V21 has no
+        /// ImportProvider: import is a per-composition method, and whole-software
+        /// import does not exist.
+        /// </summary>
+        private void ImportXml(Session session, string target, string tempPath)
+        {
+            var file = new FileInfo(tempPath);
+            switch (target)
+            {
+                case "blocks":
+                    session.Software.BlockGroup.Blocks.Import(file, ImportOptions.Override);
+                    return;
+                case "tagTables":
+                    session.Software.TagTableGroup.TagTables.Import(file, ImportOptions.Override);
+                    return;
+                case "software":
+                    throw new InfrastructureException(
+                        "V21 has no whole-software XML import; use target blocks or tagTables");
+                default:
+                    throw new InfrastructureException($"unknown import target {JsonSerializer.Serialize(target)}");
+            }
+        }
+
+        /// <summary>
+        /// The shipped export action: export the first engineering object of
+        /// the target kind to an XML file (a utility round-trip companion for
+        /// the import action, not a numeric search target).
+        /// </summary>
+        private Wire.RunResponse RunExport(string runId, Session session, Func<bool> cancelled)
+        {
+            var exportConfig = config.Export;
+            var total = Stopwatch.StartNew();
+            var filePath = Path.Combine(
+                exportConfig.Directory,
+                $"openness-export-{SanitizeFileToken(exportConfig.Target)}-{SanitizeFileToken(runId)}.xml");
+            if (cancelled())
+            {
+                return new Wire.RunResponse { RunId = runId, Status = "killed", Error = "cancelled during execution" };
+            }
+            try
+            {
+                Directory.CreateDirectory(exportConfig.Directory);
+                ExportXml(session, exportConfig.Target, filePath);
+            }
+            catch (InfrastructureException)
+            {
+                throw;
+            }
+            catch (Exception error)
+            {
+                return new Wire.RunResponse
+                {
+                    RunId = runId,
+                    Status = "diverged",
+                    Error = $"export failed: {error.Message}",
+                    Environment = session.Environment,
+                };
+            }
+            total.Stop();
+            var result = new Dictionary<string, JsonElement>
+            {
+                ["exportPath"] = JsonSerializer.SerializeToElement(filePath),
+                ["exportMs"] = JsonSerializer.SerializeToElement(total.ElapsedMilliseconds),
+            };
+            return new Wire.RunResponse
+            {
+                RunId = runId,
+                Status = "success",
+                Result = result,
+                LicenseMs = total.ElapsedMilliseconds,
+                Environment = session.Environment,
+            };
+        }
+
+        /// <summary>
+        /// Export the first object of the target kind to XML. V21 has no
+        /// ExportProvider and exports per-object (no group or whole-software
+        /// export), so a group target exports its first object.
+        /// </summary>
+        private void ExportXml(Session session, string target, string filePath)
+        {
+            var file = new FileInfo(filePath);
+            switch (target)
+            {
+                case "blocks":
+                {
+                    var block = session.Software.BlockGroup.Blocks.FirstOrDefault();
+                    if (block == null)
+                    {
+                        throw new InfrastructureException("no blocks to export");
+                    }
+                    block.Export(file, ExportOptions.WithDefaults);
+                    return;
+                }
+                case "tagTables":
+                {
+                    var table = session.Software.TagTableGroup.TagTables.FirstOrDefault();
+                    if (table == null)
+                    {
+                        throw new InfrastructureException("no tag tables to export");
+                    }
+                    table.Export(file, ExportOptions.WithDefaults);
+                    return;
+                }
+                case "software":
+                    throw new InfrastructureException(
+                        "V21 has no whole-software XML export; use target blocks or tagTables");
+                default:
+                    throw new InfrastructureException($"unknown export target {JsonSerializer.Serialize(target)}");
+            }
         }
 
         /// <summary>

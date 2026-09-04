@@ -63,6 +63,39 @@ namespace OpennessBridge
     }
 
     /// <summary>
+    /// The <c>import</c> action: <see cref="Target"/> names the composition the
+    /// Openness-format XML is imported into, and <see cref="Source"/> is that
+    /// XML with <c>{{paramKey}}</c> placeholders replaced by numeric candidate
+    /// values before import. V21 exposes import as composition-level methods
+    /// (<c>PlcBlockComposition.Import</c>, <c>PlcTagTableComposition.Import</c>),
+    /// not a generic ImportProvider.
+    /// </summary>
+    public sealed class ImportConfig
+    {
+        /// <summary>Import target: <c>blocks</c> or <c>tagTables</c> (<c>software</c> is unsupported by V21).</summary>
+        public string Target { get; set; } = string.Empty;
+
+        /// <summary>Openness-format XML with <c>{{paramKey}}</c> placeholders.</summary>
+        public string Source { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// The <c>export</c> action: <see cref="Target"/> names the kind of
+    /// engineering object to export, and <see cref="Directory"/> receives the
+    /// exported XML. V21 exposes export as object-level methods
+    /// (<c>PlcBlock.Export</c>, <c>PlcTagTable.Export</c>), so a group target
+    /// exports its first object.
+    /// </summary>
+    public sealed class ExportConfig
+    {
+        /// <summary>Export target: <c>blocks</c> or <c>tagTables</c> (<c>software</c> is unsupported by V21).</summary>
+        public string Target { get; set; } = string.Empty;
+
+        /// <summary>Destination directory for the exported XML file.</summary>
+        public string Directory { get; set; } = string.Empty;
+    }
+
+    /// <summary>
     /// Optional self-provisioning: when the configured project does not exist,
     /// the real host creates a folder-based project and inserts one device
     /// (a PLC CPU order number also brings its PLC software along).
@@ -109,8 +142,9 @@ namespace OpennessBridge
         /// The shipped run action: <c>compile</c> (write start values then
         /// compile; the default), <c>online</c> (write start values, download
         /// to the simulation target, go online, and read back online values),
-        /// or <c>generate</c> (render an SCL template, import the block, and
-        /// compile).
+        /// <c>generate</c> (render an SCL template, import the block, and
+        /// compile), <c>import</c> (batch XML import into a composition, then
+        /// compile), or <c>export</c> (XML export of an engineering object).
         /// </summary>
         public string Action { get; set; } = "compile";
 
@@ -119,6 +153,12 @@ namespace OpennessBridge
 
         /// <summary>SCL template settings; used only by the <c>generate</c> action.</summary>
         public GenerateConfig Generate { get; set; } = new GenerateConfig();
+
+        /// <summary>Openness XML import settings; used only by the <c>import</c> action.</summary>
+        public ImportConfig Import { get; set; } = new ImportConfig();
+
+        /// <summary>Openness XML export settings; used only by the <c>export</c> action.</summary>
+        public ExportConfig Export { get; set; } = new ExportConfig();
 
         /// <summary>Parameter key to tag binding, with inclusive numeric bounds.</summary>
         public Dictionary<string, ParamBinding> Params { get; set; } = new Dictionary<string, ParamBinding>();
@@ -145,9 +185,10 @@ namespace OpennessBridge
             {
                 throw new InvalidOperationException("config mode must be WithoutUserInterface or WithUserInterface");
             }
-            if (config.Action != "compile" && config.Action != "online" && config.Action != "generate")
+            if (config.Action != "compile" && config.Action != "online" && config.Action != "generate"
+                && config.Action != "import" && config.Action != "export")
             {
-                throw new InvalidOperationException("config action must be compile, online, or generate");
+                throw new InvalidOperationException("config action must be compile, online, generate, import, or export");
             }
             if (config.Action == "online")
             {
@@ -172,13 +213,35 @@ namespace OpennessBridge
                         "config generate requires non-empty blockName and source");
                 }
             }
+            if (config.Action == "import")
+            {
+                var import = config.Import;
+                if (import == null
+                    || !IsValidTarget(import.Target)
+                    || string.IsNullOrWhiteSpace(import.Source))
+                {
+                    throw new InvalidOperationException(
+                        "config import requires target software|blocks|tagTables and non-empty source");
+                }
+            }
+            if (config.Action == "export")
+            {
+                var export = config.Export;
+                if (export == null
+                    || !IsValidTarget(export.Target)
+                    || string.IsNullOrWhiteSpace(export.Directory))
+                {
+                    throw new InvalidOperationException(
+                        "config export requires target software|blocks|tagTables and non-empty directory");
+                }
+            }
             foreach (var entry in config.Params)
             {
                 if (string.IsNullOrWhiteSpace(entry.Key))
                 {
                     throw new InvalidOperationException("config param keys must be non-empty strings");
                 }
-                if (config.Action != "generate"
+                if ((config.Action == "compile" || config.Action == "online")
                     && (string.IsNullOrWhiteSpace(entry.Value.Block) || string.IsNullOrWhiteSpace(entry.Value.Member)))
                 {
                     throw new InvalidOperationException(
@@ -203,6 +266,12 @@ namespace OpennessBridge
             }
             config.Fake = config.Fake || forceFake;
             return config;
+        }
+
+        /// <summary>The import/export target vocabulary shared by both actions.</summary>
+        private static bool IsValidTarget(string target)
+        {
+            return target == "software" || target == "blocks" || target == "tagTables";
         }
     }
 }
