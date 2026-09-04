@@ -6,7 +6,7 @@ Optional Web overlay that mounts the [TIA Portal Openness spec-loop adapter](../
 
 ## Prerequisites
 
-- A Windows host with TIA Portal V21 and the Openness API installed, plus a project TIA can open. Build and start the bridge as described in the [bridge README](../../packages/spec-loop/provider-openness/bridge/README.md) (use `--fake` for a wiring-only demo without TIA).
+- A Windows host with TIA Portal V21 and the Openness API installed, plus a project TIA can open. Build and start the bridge as described in the [bridge README](../../packages/spec-loop/provider-openness/bridge/README.md) (use `--fake` for a wiring-only demo without TIA). The real actions need a **STEP 7 Basic/Professional license** in the Automation License Manager pool and a project with a PLC (the bridge's `bootstrap` config creates one automatically).
 - The bridge reachable at `OPENNESS_BRIDGE_URL` (default `http://127.0.0.1:4279`).
 
 ## Run

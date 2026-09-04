@@ -28,6 +28,6 @@ spec-loop 能力发布时只带了适配器 seam、没有 provider：[能力笔�
 ## Consequences
 
 - 2026-09-02 笔记中“无随附 provider”的事实被部分取代：现在随附一个 provider；遥测流提前终止（S-5/S-6）仍属延期，桥只在 Openness 调用结束时上报结果。
-- 真实 Openness 宿主只能在装有 TIA Portal V21 的机器上编译：仓库门禁验证协议层与假宿主，绑定 TIA 的宿主已针对安装的 V21 API 编译验证（TIA V21 把 Openness API 拆分为 `Siemens.Engineering.Base`/`.Step7` 程序集，并把变量编辑与编译指标移到 attribute 与 `ErrorCount`/`WarningCount` 面上；宿主已与 V21 对齐）。运行期程序集解析走官方 `Siemens.Collaboration.Net.TiaPortal.Openness.Resolver` 包（Copy Local 关闭），TIA V21 机器上的冒烟已验证解析器与 `Siemens TIA Openness` 组安全校验；打开/编译/变量写入的运行期路径待重新登录后在工程副本上完成冒烟。
+- 真实 Openness 宿主只能在装有 TIA Portal V21 的机器上编译：仓库门禁验证协议层与假宿主，绑定 TIA 的宿主已针对安装的 V21 API 编译验证（TIA V21 把 Openness API 拆分为 `Siemens.Engineering.Base`/`.Step7` 程序集，并把变量编辑与编译指标移到 attribute 与 `ErrorCount`/`WarningCount` 面上；宿主已与 V21 对齐）。运行期程序集解析走官方 `Siemens.Collaboration.Net.TiaPortal.Openness.Resolver` 包（Copy Local 关闭）。TIA V21 机器上的冒烟已验证解析器、`Siemens TIA Openness` 组校验、无头 TIA 启动、目录型工程打开、工程创建与硬件目录查询（`Find` 返回条目，其 `TypeIdentifier` 为 `OrderNumber:<订货号>/<版本>` 形式，正是 `CreateWithItem` 的入参）；设备插入与编译抵达 STEP 7 许可闸门（无许可的机器上为 `LicenseNotFoundException`），这两步运行期路径待有许可后再冒烟。
 - 许可证记账保持近似：桥把编译墙钟时长上报为 `licenseMs`；没有许可证池台账。
 - spawn 模式测试不启动子进程（仓库测试沙箱拒绝管道 stdio 的 spawn）；spawner 是注入 seam，就绪行与随 fiber 销毁的行为由假实现覆盖，外加 `apps/web/tests/openness-spec-loop.e2e.ts` 的一次组装 Web e2e 引导。

@@ -6,7 +6,7 @@
 
 ## 前置条件
 
-- 一台装有 TIA Portal V21 与 Openness API 的 Windows 主机，以及一个 TIA 可打开的工程。按[桥 README](../../packages/spec-loop/provider-openness/bridge/README.md) 构建并启动桥（只想验证接线时可用 `--fake`，无需 TIA）。
+- 一台装有 TIA Portal V21 与 Openness API 的 Windows 主机，以及一个 TIA 可打开的工程。按[桥 README](../../packages/spec-loop/provider-openness/bridge/README.md) 构建并启动桥（只想验证接线时可用 `--fake`，无需 TIA）。真实动作需要许可证池里的 **STEP 7 Basic/Professional 许可证**与含 PLC 的工程（桥的 `bootstrap` 配置可自动创建）。
 - 桥可从 `OPENNESS_BRIDGE_URL` 访问（默认 `http://127.0.0.1:4279`）。
 
 ## 运行
