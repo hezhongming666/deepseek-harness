@@ -48,6 +48,6 @@ import type { Config } from '@deepseek-ai/dsh-provider-openness'
 ## Known Limitations and Deferred Work
 
 - **无遥测流提前终止**——桥只在 Openness 调用结束时上报结果；发散从最终编译结果判定，而非增量求解器遥测。
-- **真实 Openness 宿主编译已验证、运行期由部署方验证**——仓库构建可在任何机器上编译协议层与假宿主，绑定 TIA 的宿主已在 TIA 机器上针对安装的 V21 API 编译通过（V21 的变量/编译面已在仓库内对齐）；其运行期写入与编译路径在部署时用工程副本冒烟验证（见[桥 README](bridge/README.md)）。
+- **真实 Openness 宿主编译已验证、运行期已真机验证**——仓库构建可在任何机器上编译协议层与假宿主，绑定 TIA 的宿主已在 TIA 机器上针对安装的 V21 API 编译通过（V21 的软件/编译/数据块成员面已在仓库内对齐）；持 STEP 7 Professional 试用许可的 TIA Portal V21 真机验证了完整运行链路——无头打开、全局数据块成员起始值写入、编译，以及带密钥的 `spec_loop` 以 `satisfied` 收尾（见[桥 README](bridge/README.md)）。
 - **取消无法抢占 Openness**——`/cancel` 在进行中的调用结束后丢弃其结果；截至彼时的许可证时长仍被消耗。
 - **许可证记账为编译墙钟时长**——桥把编译的墙钟跨度上报为 `licenseMs`；真正的许可证池台账仍属部署方。

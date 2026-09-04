@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-04-openness-spec-loop-adapter.md
-2026-09-04-openness-spec-loop-adapter.md: 158acb5588d7c929be0849766a5d0fd744296d38
-2026-09-04-openness-spec-loop-adapter.zh.md: 0b7ec55c82f310c8762ee657c09c7e075b29860f
+2026-09-04-openness-spec-loop-adapter.md: c72a77f3fdc21a3eea908ae66769c4db2d299797
+2026-09-04-openness-spec-loop-adapter.zh.md: 96ffd73b565bb798eae107f97301836fb9247ab8
