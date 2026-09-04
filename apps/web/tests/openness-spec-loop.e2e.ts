@@ -106,7 +106,7 @@ describe.skipIf(MODE === 'record')('web e2e: Openness spec-loop overlay', () => 
 
   it('mounts the adapter through the overlay and completes a satisfying spec_loop run', async () => {
     const adapter = scaffold.ctx.get('specLoopAdapter')
-    expect(adapter).toBeDefined()
+    if (!adapter) throw new Error('specLoopAdapter not mounted by the overlay')
     await expect(adapter.validate({ coolingTimeMs: 12000 })).resolves.toEqual({ ok: true, reasons: [] })
     const result = await scaffold.ctx.tools.execute({
       signal: AbortSignal.timeout(30_000),
