@@ -18,6 +18,29 @@ namespace OpennessBridge
     }
 
     /// <summary>
+    /// Optional self-provisioning: when the configured project does not exist,
+    /// the real host creates a folder-based project and inserts one device
+    /// (a PLC CPU order number also brings its PLC software along).
+    /// </summary>
+    public sealed class BootstrapConfig
+    {
+        /// <summary>Parent directory for the folder-based project to create.</summary>
+        public string Directory { get; set; } = string.Empty;
+
+        /// <summary>Project name; the project lands in <c>Directory\ProjectName</c>.</summary>
+        public string ProjectName { get; set; } = string.Empty;
+
+        /// <summary>Device order number from the TIA catalog, e.g. a SIMATIC S7-1200 CPU.</summary>
+        public string DeviceOrderNumber { get; set; } = string.Empty;
+
+        /// <summary>Device name inside the project.</summary>
+        public string DeviceName { get; set; } = string.Empty;
+
+        /// <summary>Firmware/catalog version string, e.g. <c>V4.5</c>.</summary>
+        public string DeviceVersion { get; set; } = string.Empty;
+    }
+
+    /// <summary>
     /// The bridge's JSON config file, loaded once at startup.
     /// </summary>
     public sealed class BridgeConfig
@@ -39,6 +62,9 @@ namespace OpennessBridge
 
         /// <summary>Parameter key to tag binding, with inclusive numeric bounds.</summary>
         public Dictionary<string, ParamBinding> Params { get; set; } = new Dictionary<string, ParamBinding>();
+
+        /// <summary>Optional project/device creation when the project is missing.</summary>
+        public BootstrapConfig? Bootstrap { get; set; }
 
         /// <summary>
         /// Load and validate a config file.
@@ -72,6 +98,18 @@ namespace OpennessBridge
                 if (entry.Value.Min > entry.Value.Max)
                 {
                     throw new InvalidOperationException($"config param {entry.Key} bounds are inverted");
+                }
+            }
+            if (config.Bootstrap != null)
+            {
+                if (string.IsNullOrWhiteSpace(config.Bootstrap.Directory)
+                    || string.IsNullOrWhiteSpace(config.Bootstrap.ProjectName)
+                    || string.IsNullOrWhiteSpace(config.Bootstrap.DeviceOrderNumber)
+                    || string.IsNullOrWhiteSpace(config.Bootstrap.DeviceName)
+                    || string.IsNullOrWhiteSpace(config.Bootstrap.DeviceVersion))
+                {
+                    throw new InvalidOperationException(
+                        "config bootstrap requires directory, projectName, deviceOrderNumber, deviceName, and deviceVersion");
                 }
             }
             config.Fake = config.Fake || forceFake;

@@ -7,5 +7,12 @@
   "params": {
     "coolingTimeMs": { "tag": "Diag.coolingTimeMs", "min": 0, "max": 60000 },
     "threshold": { "tag": "Diag.threshold", "min": 0, "max": 100 }
+  },
+  "bootstrap": {
+    "directory": "C:\\Projects\\Demo",
+    "projectName": "Demo",
+    "deviceOrderNumber": "6ES7 214-1BG40-0XB0",
+    "deviceName": "PLC_1",
+    "deviceVersion": "V4.5"
   }
 }

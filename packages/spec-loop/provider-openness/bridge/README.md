@@ -17,7 +17,8 @@ Runs are serialized (HTTP 409 when one is in flight); host outages surface as HT
 
 - The Windows user running the bridge must be a member of the local group **`Siemens TIA Openness`** (`net localgroup "Siemens TIA Openness" <user> /add`). The membership reaches a process only through a fresh logon: after adding the user, log off and back on before starting the bridge.
 - The bridge resolves `Siemens.Engineering.*` at runtime from the installed TIA Portal through the official `Siemens.Collaboration.Net.TiaPortal.Openness.Resolver` packages; Copy Local stays off for the Openness assemblies (TIA's own loader rejects local copies).
-- TIA Portal V21 and its Openness option must be installed, with a license covering the project operations the run action performs.
+- TIA Portal V21 and its Openness option must be installed. Creating a device and compiling needs a **STEP 7 Basic/Professional license** in the Automation License Manager pool (a TIA Portal trial license also satisfies it); without one, `CreateWithItem` and compile fail with `LicenseNotFoundException`.
+- The run action's project needs a PLC device: configure `bootstrap` to create one automatically, or point `projectPath` at an existing project that contains one.
 
 ## Build
 
@@ -43,9 +44,10 @@ OpennessBridge.exe --config bridge.example.json          # real host, needs TIA 
 OpennessBridge.exe --fake --config bridge.example.json   # deterministic fake, any Windows machine
 OpennessBridge.exe --config bridge.json --list-devices   # print device items (pick the `device` value)
 OpennessBridge.exe --config bridge.json --list-tags      # print PLC tags (write the `params` map)
+OpennessBridge.exe --config bridge.json --find-device "1214C"  # catalog lookup (type identifiers)
 ```
 
-On startup the bridge prints exactly one stdout line — `{"event":"listening","url":"http://127.0.0.1:<port>"}` — which the adapter's spawn mode waits for. Config fields: `port` (0 discovers a free port), `projectPath`, `mode` (`WithoutUserInterface` | `WithUserInterface`), `device` (empty selects the first device with PLC software), `params` (parameter key → `{ tag, min, max }` tag bindings). Openness programs need a matching TIA Portal installation and a license for the project operations the run action performs.
+On startup the bridge prints exactly one stdout line — `{"event":"listening","url":"http://127.0.0.1:<port>"}` — which the adapter's spawn mode waits for. Config fields: `port` (0 discovers a free port), `projectPath`, `mode` (`WithoutUserInterface` | `WithUserInterface`), `device` (empty selects the first device with PLC software), `params` (parameter key → `{ tag, min, max }` tag bindings), and the optional `bootstrap` block (`directory`, `projectName`, `deviceOrderNumber`, `deviceName`, `deviceVersion`) that creates a folder-based project with a PLC device when `projectPath` does not exist. Openness programs need a matching TIA Portal installation and a license for the project operations the run action performs.
 
 ## Shipped action
 

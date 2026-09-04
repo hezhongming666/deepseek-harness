@@ -45,7 +45,7 @@ namespace OpennessBridge
                 config.Port = options.Port.Value;
             }
             IOpennessHost host = CreateHost(config);
-            if (options.ListTags || options.ListDevices)
+            if (options.ListTags || options.ListDevices || options.FindDevice != null)
             {
                 try
                 {
@@ -54,6 +54,7 @@ namespace OpennessBridge
                     {
                         if (options.ListDevices) opennessHost.ListDevices(Console.Out);
                         if (options.ListTags) opennessHost.ListTags(Console.Out);
+                        if (options.FindDevice != null) opennessHost.FindDevices(Console.Out, options.FindDevice);
                         host.Dispose();
                         return 0;
                     }
@@ -64,7 +65,7 @@ namespace OpennessBridge
                     Console.Error.WriteLine(Flatten(error));
                     return 2;
                 }
-                Console.Error.WriteLine("--list-tags/--list-devices require the full Openness build (not --fake)");
+                Console.Error.WriteLine("--list-tags/--list-devices/--find-device require the full Openness build (not --fake)");
                 return 2;
             }
             var shutdownRequested = new TaskCompletionSource<bool>();
@@ -130,6 +131,7 @@ namespace OpennessBridge
             public bool Fake { get; set; }
             public bool ListTags { get; set; }
             public bool ListDevices { get; set; }
+            public string? FindDevice { get; set; }
             public int? Port { get; set; }
         }
 
@@ -152,6 +154,12 @@ namespace OpennessBridge
                         break;
                     case "--list-devices":
                         options.ListDevices = true;
+                        break;
+                    case "--find-device":
+                        index += 1;
+                        options.FindDevice = index < args.Length
+                            ? args[index]
+                            : throw new InvalidOperationException("--find-device requires a query");
                         break;
                     case "--config":
                         index += 1;

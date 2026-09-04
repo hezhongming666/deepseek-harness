@@ -118,6 +118,90 @@ namespace OpennessBridge
             }
         }
 
+        /// <summary>
+        /// Print every hardware-catalog entry whose article number or type name
+        /// contains the query. This is the deployment diagnostic for finding
+        /// the type identifier CreateWithItem needs.
+        /// </summary>
+        /// <param name="output">The sink receiving the listing.</param>
+        /// <param name="query">Substring matched against article numbers and type names.</param>
+        public void FindDevices(TextWriter output, string query)
+        {
+            var opened = EnsureProject();
+            var catalog = FindCatalogObject(output, portal!);
+            catalog ??= FindCatalogObject(output, opened);
+            if (catalog == null)
+            {
+                throw new InfrastructureException("no hardware-catalog composition found on the portal or project");
+            }
+            var compositions = ((IEngineeringObject)catalog).GetCompositionInfos().ToList();
+            output.WriteLine($"catalog {catalog.GetType().FullName}: {compositions.Count} compositions");
+            var typedCatalog = (Siemens.Engineering.HW.HardwareCatalog.HardwareCatalog)catalog;
+            var matched = 0;
+            foreach (var probe in ProbeKeys(query))
+            {
+                IList<Siemens.Engineering.HW.HardwareCatalog.CatalogEntry> found;
+                try
+                {
+                    found = typedCatalog.Find(probe);
+                }
+                catch
+                {
+                    // A key form the catalog rejects; try the next one.
+                    continue;
+                }
+                foreach (var entry in found)
+                {
+                    matched += 1;
+                    output.WriteLine(
+                        $"{entry.TypeName}\t{entry.ArticleNumber}\t{entry.Version}\t{entry.TypeIdentifier}\t{entry.CatalogPath}");
+                }
+            }
+            output.WriteLine($"matched {matched} entry/entries");
+        }
+
+        /// <summary>The key forms tried against the catalog's Find.</summary>
+        private static IEnumerable<string> ProbeKeys(string query)
+        {
+            yield return query;
+            yield return query.Replace("-", " ");
+            yield return $"Controllers/SIMATIC S7-1200/CPU/{query}";
+            yield return query.ToUpperInvariant();
+        }
+
+        /// <summary>Count devices by explicit enumeration (Linq extensions are shadowed here).</summary>
+        private static int CountDevices(Project target)
+        {
+            var count = 0;
+            foreach (var _ in target.Devices)
+            {
+                count += 1;
+            }
+            return count;
+        }
+
+        /// <summary>Locate the hardware catalog through the engineering-object composition seam.</summary>
+        private static object? FindCatalogObject(TextWriter output, IEngineeringObject root)
+        {
+            foreach (var composition in root.GetCompositionInfos())
+            {
+                try
+                {
+                    var value = root.GetComposition(composition.Name);
+                    var type = value?.GetType();
+                    if (type != null && type.FullName != null && type.FullName.Contains("HardwareCatalog"))
+                    {
+                        return value;
+                    }
+                }
+                catch
+                {
+                    // Not every composition resolves on a fresh project; try the next one.
+                }
+            }
+            return null;
+        }
+
         public Wire.ValidateResponse Validate(IReadOnlyDictionary<string, JsonElement> parameters)
         {
             EnsureSession();
@@ -320,9 +404,17 @@ namespace OpennessBridge
                 plcSoftware ??= FindPlcSoftware(opened);
                 if (plcSoftware == null)
                 {
+                    var inventory = new List<string>();
+                    foreach (var device in opened.Devices)
+                    {
+                        foreach (var item in device.DeviceItems)
+                        {
+                            inventory.Add($"{device.Name}/{item.GetType().Name}/{item.Name}");
+                        }
+                    }
                     throw new InfrastructureException(
                         $"no PLC software found in project {JsonSerializer.Serialize(config.ProjectPath)}; "
-                        + "run --list-devices to see the device items");
+                        + $"device items: [{string.Join(", ", inventory)}]");
                 }
                 return new Session(
                     opened,
@@ -352,9 +444,21 @@ namespace OpennessBridge
                 var projectPath = new FileInfo(config.ProjectPath);
                 if (!projectPath.Exists)
                 {
-                    process.Dispose();
-                    throw new InfrastructureException(
-                        $"project path {JsonSerializer.Serialize(config.ProjectPath)} does not exist");
+                    if (config.Bootstrap == null)
+                    {
+                        process.Dispose();
+                        throw new InfrastructureException(
+                            $"project path {JsonSerializer.Serialize(config.ProjectPath)} does not exist "
+                            + "(set config bootstrap to create a project with a PLC)");
+                    }
+                    var created = CreateBootstrapProject(process, config.Bootstrap);
+                    portal = process;
+                    project = created;
+                    config.ProjectPath = Path.Combine(
+                        config.Bootstrap.Directory,
+                        config.Bootstrap.ProjectName,
+                        $"{config.Bootstrap.ProjectName}.ap21");
+                    return created;
                 }
                 var opened = process.Projects.Open(projectPath);
                 portal = process;
@@ -372,6 +476,55 @@ namespace OpennessBridge
                 // failures are usually type-initializer errors whose
                 // inner exception names the missing dependency.
                 throw new InfrastructureException($"opening the TIA Portal project failed: {error}", error);
+            }
+        }
+
+        /// <summary>
+        /// Create a folder-based project with the configured PLC device. A CPU
+        /// order number also brings the device's PLC software along; the
+        /// created project stays open in the session.
+        /// </summary>
+        private Project CreateBootstrapProject(TiaPortal process, BootstrapConfig bootstrap)
+        {
+            var directory = new DirectoryInfo(bootstrap.Directory);
+            directory.Create();
+            var created = process.Projects.Create(directory, bootstrap.ProjectName);
+            try
+            {
+                var catalog = FindCatalogObject(TextWriter.Null, process)
+                    ?? FindCatalogObject(TextWriter.Null, created);
+                if (catalog == null)
+                {
+                    throw new InfrastructureException("the project exposes no hardware catalog");
+                }
+                var typedCatalog = (Siemens.Engineering.HW.HardwareCatalog.HardwareCatalog)catalog;
+                var entry = typedCatalog.Find(bootstrap.DeviceOrderNumber)
+                    .FirstOrDefault(candidate => candidate.ArticleNumber == bootstrap.DeviceOrderNumber
+                        && candidate.Version == bootstrap.DeviceVersion);
+                if (entry == null)
+                {
+                    throw new InfrastructureException(
+                        $"the catalog has no entry for order number {bootstrap.DeviceOrderNumber} "
+                        + $"version {bootstrap.DeviceVersion}; run --find-device <query> to list candidates");
+                }
+                var device = created.Devices.CreateWithItem(entry.TypeIdentifier, bootstrap.DeviceName, bootstrap.DeviceName);
+                var countAfterCreate = CountDevices(created);
+                created.Save();
+                var countAfterSave = CountDevices(created);
+                Console.Error.WriteLine(
+                    $"bootstrap: devices after create={countAfterCreate}, after save={countAfterSave}");
+                if (device == null || countAfterCreate == 0)
+                {
+                    throw new InfrastructureException(
+                        $"device creation produced {countAfterCreate} device(s) for entry "
+                        + $"{entry.TypeName} {entry.ArticleNumber} {entry.Version} ({entry.TypeIdentifier})");
+                }
+                return created;
+            }
+            catch
+            {
+                created.Close();
+                throw;
             }
         }
 

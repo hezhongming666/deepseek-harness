@@ -17,7 +17,8 @@ run 串行执行（在飞时返回 HTTP 409）；宿主不可用表现为 HTTP 5
 
 - 运行桥的 Windows 用户必须是本地组 **`Siemens TIA Openness`** 的成员（`net localgroup "Siemens TIA Openness" <用户> /add`）。组关系只有通过新登录才能进入进程令牌：加组后请注销重新登录，再启动桥。
 - 桥在运行期通过官方 `Siemens.Collaboration.Net.TiaPortal.Openness.Resolver` 包从已安装的 TIA Portal 解析 `Siemens.Engineering.*`；Openness 程序集保持 Copy Local 关闭（TIA 自身的加载器拒绝本地副本）。
-- 需安装 TIA Portal V21 及其 Openness 组件，并持有覆盖 run 动作所执行工程操作的许可证。
+- 需安装 TIA Portal V21 及其 Openness 组件。创建设备与编译需要许可证池里的 **STEP 7 Basic/Professional 许可证**（TIA Portal 试用许可证同样满足）；否则 `CreateWithItem` 与编译会以 `LicenseNotFoundException` 失败。
+- run 动作的工程需要 PLC 设备：配置 `bootstrap` 自动创建，或把 `projectPath` 指向一个已含 PLC 设备的既有工程。
 
 ## 构建
 
@@ -43,9 +44,10 @@ OpennessBridge.exe --config bridge.example.json          # real host, needs TIA 
 OpennessBridge.exe --fake --config bridge.example.json   # deterministic fake, any Windows machine
 OpennessBridge.exe --config bridge.json --list-devices   # print device items (pick the `device` value)
 OpennessBridge.exe --config bridge.json --list-tags      # print PLC tags (write the `params` map)
+OpennessBridge.exe --config bridge.json --find-device "1214C"  # catalog lookup (type identifiers)
 ```
 
-启动时桥在 stdout 打印恰好一行——`{"event":"listening","url":"http://127.0.0.1:<port>"}`——适配器的 spawn 模式等待这一行。配置字段：`port`（0 表示自动发现空闲端口）、`projectPath`、`mode`（`WithoutUserInterface` | `WithUserInterface`）、`device`（空表示选择第一个带 PLC 软件的设备）、`params`（参数键 → `{ tag, min, max }` 变量绑定）。Openness 程序需要配套安装的 TIA Portal 与 run 动作所执行工程操作的许可证。
+启动时桥在 stdout 打印恰好一行——`{"event":"listening","url":"http://127.0.0.1:<port>"}`——适配器的 spawn 模式等待这一行。配置字段：`port`（0 表示自动发现空闲端口）、`projectPath`、`mode`（`WithoutUserInterface` | `WithUserInterface`）、`device`（空表示选择第一个带 PLC 软件的设备）、`params`（参数键 → `{ tag, min, max }` 变量绑定），以及可选 `bootstrap` 块（`directory`、`projectName`、`deviceOrderNumber`、`deviceName`、`deviceVersion`）——当 `projectPath` 不存在时自动创建目录型工程并插入 PLC 设备。Openness 程序需要配套安装的 TIA Portal 与 run 动作所执行工程操作的许可证。
 
 ## 随附动作
 
