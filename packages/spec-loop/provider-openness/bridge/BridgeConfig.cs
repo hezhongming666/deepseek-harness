@@ -6,13 +6,19 @@ using System.Text.Json;
 namespace OpennessBridge
 {
     /// <summary>
-    /// One parameter binding: a numeric parameter key mapped to a PLC tag
-    /// whose start value the run action writes, with inclusive numeric bounds
-    /// enforced by validate.
+    /// One parameter binding: a numeric parameter key mapped to a global data
+    /// block member whose start value the run action writes, with inclusive
+    /// numeric bounds enforced by validate. V21 exposes member start values as
+    /// the dynamic `StartValue` attribute, not as a tag property.
     /// </summary>
     public sealed class ParamBinding
     {
-        public string Tag { get; set; } = string.Empty;
+        /// <summary>Global data block name, e.g. <c>Diag</c>.</summary>
+        public string Block { get; set; } = string.Empty;
+
+        /// <summary>Member name inside the block interface, e.g. <c>threshold</c>.</summary>
+        public string Member { get; set; } = string.Empty;
+
         public double Min { get; set; }
         public double Max { get; set; }
     }
@@ -91,9 +97,10 @@ namespace OpennessBridge
                 {
                     throw new InvalidOperationException("config param keys must be non-empty strings");
                 }
-                if (string.IsNullOrWhiteSpace(entry.Value.Tag))
+                if (string.IsNullOrWhiteSpace(entry.Value.Block) || string.IsNullOrWhiteSpace(entry.Value.Member))
                 {
-                    throw new InvalidOperationException($"config param {entry.Key} requires a non-empty tag path");
+                    throw new InvalidOperationException(
+                        $"config param {entry.Key} requires non-empty block and member names");
                 }
                 if (entry.Value.Min > entry.Value.Max)
                 {

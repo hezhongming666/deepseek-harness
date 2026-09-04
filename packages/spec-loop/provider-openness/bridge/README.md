@@ -8,7 +8,7 @@ The bridge process behind `@deepseek-ai/dsh-provider-openness`: a Windows host t
 
 - `GET /health` — readiness plus the environment tuple (`softwareVersion`, `osKernel`).
 - `POST /validate` — the cheap S1 gate: parameter keys and inclusive numeric bounds against the config; no compile, no project writes.
-- `POST /run` — the shipped action: write each parameter to its bound tag's start value, compile the PLC, and report `{ compileErrors, compileWarnings, compileMs }`. Compile wall time is also reported as `licenseMs` (the license-consuming span the bridge can measure).
+- `POST /run` — the shipped action: write each parameter to its bound global-DB member's start value, compile the PLC, and report `{ compileErrors, compileWarnings, compileMs }`. Compile wall time is also reported as `licenseMs` (the license-consuming span the bridge can measure).
 - `POST /cancel` — best effort: an in-flight Openness call cannot be preempted, so the bridge drops the result when the cancelled run settles.
 
 Runs are serialized (HTTP 409 when one is in flight); host outages surface as HTTP 503, which the adapter classifies as S3.
@@ -47,8 +47,8 @@ OpennessBridge.exe --config bridge.json --list-tags      # print PLC tags (write
 OpennessBridge.exe --config bridge.json --find-device "1214C"  # catalog lookup (type identifiers)
 ```
 
-On startup the bridge prints exactly one stdout line — `{"event":"listening","url":"http://127.0.0.1:<port>"}` — which the adapter's spawn mode waits for. Config fields: `port` (0 discovers a free port), `projectPath`, `mode` (`WithoutUserInterface` | `WithUserInterface`), `device` (empty selects the first device with PLC software), `params` (parameter key → `{ tag, min, max }` tag bindings), and the optional `bootstrap` block (`directory`, `projectName`, `deviceOrderNumber`, `deviceName`, `deviceVersion`) that creates a folder-based project with a PLC device when `projectPath` does not exist. Openness programs need a matching TIA Portal installation and a license for the project operations the run action performs.
+On startup the bridge prints exactly one stdout line — `{"event":"listening","url":"http://127.0.0.1:<port>"}` — which the adapter's spawn mode waits for. Config fields: `port` (0 discovers a free port), `projectPath`, `mode` (`WithoutUserInterface` | `WithUserInterface`), `device` (empty selects the first device with PLC software), `params` (parameter key → `{ block, member, min, max }` global-DB member bindings), and the optional `bootstrap` block (`directory`, `projectName`, `deviceOrderNumber`, `deviceName`, `deviceVersion`) that creates a folder-based project with a PLC device when `projectPath` does not exist. Openness programs need a matching TIA Portal installation and a license for the project operations the run action performs.
 
 ## Shipped action
 
-The parameter domain is deployment-defined through the config's `params` map: each parameter key binds to one PLC tag path, and a run writes the candidate's numeric values into those tags' start values before compiling. The demo spec for this action asserts `compileErrors lte 0` and minimizes `compileErrors`. Deployments that need a different action (technology-object sweeps, export settings) extend the C# host; the adapter and the protocol stay unchanged.
+The parameter domain is deployment-defined through the config's `params` map: each parameter key binds to one global data block member, and a run writes the candidate's numeric values into those members' start values (V21's dynamic `StartValue` attribute) before compiling. The demo spec for this action asserts `compileErrors lte 0` and minimizes `compileErrors`. Deployments that need a different action (technology-object sweeps, export settings) extend the C# host; the adapter and the protocol stay unchanged.

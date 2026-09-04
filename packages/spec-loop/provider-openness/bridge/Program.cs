@@ -44,8 +44,17 @@ namespace OpennessBridge
             {
                 config.Port = options.Port.Value;
             }
-            IOpennessHost host = CreateHost(config);
-            if (options.ListTags || options.ListDevices || options.FindDevice != null || options.ProbeSoftware)
+            IOpennessHost host;
+            try
+            {
+                host = CreateHost(config);
+            }
+            catch (Exception error)
+            {
+                Console.Error.WriteLine(Flatten(error));
+                return 2;
+            }
+            if (options.ListTags || options.ListDevices || options.FindDevice != null || options.ProbeSoftware || options.ProbeTag != null)
             {
                 try
                 {
@@ -56,6 +65,7 @@ namespace OpennessBridge
                         if (options.ListTags) opennessHost.ListTags(Console.Out);
                         if (options.FindDevice != null) opennessHost.FindDevices(Console.Out, options.FindDevice);
                         if (options.ProbeSoftware) opennessHost.ProbeSoftware(Console.Out);
+                        if (options.ProbeTag != null) opennessHost.ProbeTag(Console.Out, options.ProbeTag);
                         host.Dispose();
                         return 0;
                     }
@@ -66,7 +76,7 @@ namespace OpennessBridge
                     Console.Error.WriteLine(Flatten(error));
                     return 2;
                 }
-                Console.Error.WriteLine("--list-tags/--list-devices/--find-device/--probe-software require the full Openness build (not --fake)");
+                Console.Error.WriteLine("--list-tags/--list-devices/--find-device/--probe-software/--probe-tag require the full Openness build (not --fake)");
                 return 2;
             }
             var shutdownRequested = new TaskCompletionSource<bool>();
@@ -133,6 +143,7 @@ namespace OpennessBridge
             public bool ListTags { get; set; }
             public bool ListDevices { get; set; }
             public bool ProbeSoftware { get; set; }
+            public string? ProbeTag { get; set; }
             public string? FindDevice { get; set; }
             public int? Port { get; set; }
         }
@@ -159,6 +170,12 @@ namespace OpennessBridge
                         break;
                     case "--probe-software":
                         options.ProbeSoftware = true;
+                        break;
+                    case "--probe-tag":
+                        index += 1;
+                        options.ProbeTag = index < args.Length
+                            ? args[index]
+                            : throw new InvalidOperationException("--probe-tag requires a tag name");
                         break;
                     case "--find-device":
                         index += 1;

@@ -5,8 +5,8 @@
   "mode": "WithoutUserInterface",
   "device": "",
   "params": {
-    "coolingTimeMs": { "tag": "Diag.coolingTimeMs", "min": 0, "max": 60000 },
-    "threshold": { "tag": "Diag.threshold", "min": 0, "max": 100 }
+    "coolingTimeMs": { "block": "Diag", "member": "coolingTimeMs", "min": 0, "max": 60000 },
+    "threshold": { "block": "Diag", "member": "threshold", "min": 0, "max": 100 }
   },
   "bootstrap": {
     "directory": "C:\\Projects\\Demo",

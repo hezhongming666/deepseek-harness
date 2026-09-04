@@ -12,6 +12,7 @@ using Siemens.Engineering.Compiler;
 using Siemens.Engineering.HW;
 using Siemens.Engineering.HW.Features;
 using Siemens.Engineering.SW;
+using Siemens.Engineering.SW.Blocks;
 using Siemens.Engineering.SW.Tags;
 
 namespace OpennessBridge
@@ -154,6 +155,78 @@ namespace OpennessBridge
                     output.WriteLine($"{device.Name}\t{item.GetType().FullName}\t{item.Name}");
                 }
             }
+        }
+
+        /// <summary>
+        /// Print one tag's composition surface plus attribute names: the
+        /// diagnostic for locating the tag value/start-value editor in V21.
+        /// </summary>
+        /// <param name="output">The sink receiving the listing.</param>
+        /// <param name="tagName">The flat tag name from --list-tags.</param>
+        public void ProbeTag(TextWriter output, string tagName)
+        {
+            var session = EnsureSession();
+            foreach (var table in session.Software.TagTableGroup.TagTables)
+            {
+                var tag = table.Tags.Find(tagName);
+                if (tag == null)
+                {
+                    continue;
+                }
+                output.WriteLine($"TAG {table.Name}/{tag.Name} type={tag.GetType().FullName} dataType={tag.DataTypeName}");
+                output.WriteLine($"attributes: {string.Join(", ", tag.GetAttributeInfos().Select(info => info.Name))}");
+                output.WriteLine($"services: {string.Join(", ", ((IEngineeringServiceProvider)tag).GetServiceInfos().Select(info => info.Type.FullName))}");
+                output.WriteLine($"TABLE {table.Name} type={table.GetType().FullName}");
+                output.WriteLine($"  table attrs: {string.Join(", ", table.GetAttributeInfos().Select(info => info.Name))}");
+                output.WriteLine($"  table services: {string.Join(", ", ((IEngineeringServiceProvider)table).GetServiceInfos().Select(info => info.Type.FullName))}");
+                output.WriteLine($"SOFTWARE {session.Software.Name} type={session.Software.GetType().FullName}");
+                output.WriteLine($"  software services: {string.Join(", ", ((IEngineeringServiceProvider)session.Software).GetServiceInfos().Select(info => info.Type.FullName))}");
+                foreach (var swInfo in ((IEngineeringObject)session.Software).GetCompositionInfos())
+                {
+                    output.WriteLine($"  software composition: {swInfo.Name}");
+                }
+                foreach (var tableInfo in ((IEngineeringObject)table).GetCompositionInfos())
+                {
+                    object tableValue;
+                    try
+                    {
+                        tableValue = ((IEngineeringObject)table).GetComposition(tableInfo.Name);
+                    }
+                    catch (Exception error)
+                    {
+                        output.WriteLine($"  table {tableInfo.Name}: threw {error.Message}");
+                        continue;
+                    }
+                    output.WriteLine($"  table {tableInfo.Name}: {tableValue?.GetType().FullName ?? "null"}");
+                }
+                foreach (var info in ((IEngineeringObject)tag).GetCompositionInfos())
+                {
+                    object value;
+                    try
+                    {
+                        value = ((IEngineeringObject)tag).GetComposition(info.Name);
+                    }
+                    catch (Exception error)
+                    {
+                        output.WriteLine($"  {info.Name}: threw {error.Message}");
+                        continue;
+                    }
+                    output.WriteLine($"  {info.Name}: {value?.GetType().FullName ?? "null"}");
+                    if (value is IEngineeringObject child)
+                    {
+                        try
+                        {
+                            output.WriteLine($"    child attrs: {string.Join(", ", child.GetAttributeInfos().Select(a => a.Name))}");
+                        }
+                        catch (Exception attrError)
+                        {
+                            output.WriteLine($"    child attrs threw: {attrError.Message}");
+                        }
+                    }
+                }
+                return;
+            }
+            output.WriteLine($"no tag named {tagName}");
         }
 
         /// <summary>
@@ -379,19 +452,22 @@ namespace OpennessBridge
                         Error = $"parameter {JsonSerializer.Serialize(entry.Key)} must be a number",
                     };
                 }
-                var tag = FindTag(binding.Tag);
-                if (tag == null)
+                var member = FindMember(session.Software, binding.Block, binding.Member);
+                if (member == null)
                 {
                     return new Wire.RunResponse
                     {
                         RunId = runId,
                         Status = "diverged",
-                        Error = $"tag {JsonSerializer.Serialize(binding.Tag)} does not exist in PLC {session.Software.Name}",
+                        Error = $"member {JsonSerializer.Serialize(binding.Block)}.{JsonSerializer.Serialize(binding.Member)} "
+                            + $"does not exist in PLC {session.Software.Name}",
                     };
                 }
                 try
                 {
-                    WriteTagStartValue(tag, value);
+                    // V21 exposes DB member start values as the dynamic
+                    // StartValue attribute (see the Openness manual).
+                    member.SetAttribute("StartValue", value.ToString(CultureInfo.InvariantCulture));
                 }
                 catch (Exception error)
                 {
@@ -399,7 +475,8 @@ namespace OpennessBridge
                     {
                         RunId = runId,
                         Status = "diverged",
-                        Error = $"setting tag {JsonSerializer.Serialize(binding.Tag)} failed: {error.Message}",
+                        Error = $"setting member {JsonSerializer.Serialize(binding.Block)}."
+                            + $"{JsonSerializer.Serialize(binding.Member)} failed: {error.Message}",
                     };
                 }
             }
@@ -704,34 +781,24 @@ namespace OpennessBridge
             }
         }
 
-        private PlcTag? FindTag(string path)
+        /// <summary>
+        /// Find one global data block's interface member by name.
+        /// </summary>
+        private static Siemens.Engineering.SW.Blocks.Interface.Member? FindMember(
+            PlcSoftware software,
+            string blockName,
+            string memberName)
         {
-            var software = plcSoftware;
-            if (software == null)
+            foreach (var block in software.BlockGroup.Blocks)
             {
-                return null;
-            }
-            foreach (var table in software.TagTableGroup.TagTables)
-            {
-                var tag = table.Tags.Find(path);
-                if (tag != null)
+                if (block.Name != blockName)
                 {
-                    return tag;
+                    continue;
                 }
+                var dataBlock = block as DataBlock;
+                return dataBlock?.Interface.Members.Find(memberName);
             }
             return null;
-        }
-
-        /// <summary>
-        /// Write one numeric start value into a PLC tag. V21 edits engineering
-        /// objects through their attribute seam: `SetAttribute("StartValue", …)`
-        /// on the tag (the attribute name follows the SW.InterfaceSections_v5
-        /// schema). The exact attribute name and accepted value form are
-        /// smoke-tested on a project copy at deployment time.
-        /// </summary>
-        private static void WriteTagStartValue(PlcTag tag, double value)
-        {
-            tag.SetAttribute("StartValue", value.ToString(CultureInfo.InvariantCulture));
         }
     }
 }
