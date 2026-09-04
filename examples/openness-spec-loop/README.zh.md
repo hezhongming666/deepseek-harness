@@ -17,7 +17,7 @@ OPENNESS_BRIDGE_URL=http://127.0.0.1:4279 dsh web --patch examples/openness-spec
 
 ## 试一下
 
-让 agent 用桥的随附动作执行一次 `spec_loop` 调用——候选参数写入 PLC 变量起始值，桥执行编译，闭环最小化编译错误数。对应示例配置里的 `coolingTimeMs`/`threshold` 绑定：
+让 agent 用桥的随附动作执行一次 `spec_loop` 调用——候选参数写入全局数据块成员的起始值，桥执行编译，闭环最小化编译错误数。对应示例配置里的 `coolingTimeMs`/`threshold` 绑定：
 
 ```json
 {
@@ -27,7 +27,7 @@ OPENNESS_BRIDGE_URL=http://127.0.0.1:4279 dsh web --patch examples/openness-spec
   "budgets": { "maxIterations": 8 },
   "repair": { "margin": 1, "maxNoImprovement": 3 },
   "envelope": { "bounds": { "coolingTimeMs": { "min": 0, "max": 60000 }, "threshold": { "min": 0, "max": 100 } } },
-  "description": "coolingTimeMs and threshold are PLC tag start values set before the compile."
+  "description": "coolingTimeMs and threshold are global-DB member start values set before the compile."
 }
 ```
 

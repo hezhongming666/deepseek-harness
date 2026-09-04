@@ -17,7 +17,7 @@ OPENNESS_BRIDGE_URL=http://127.0.0.1:4279 dsh web --patch examples/openness-spec
 
 ## Try it
 
-Ask the agent to run one `spec_loop` call with a spec over the bridge's shipped action — candidate parameters write PLC tag start values, the bridge compiles, and the loop minimizes compile errors. For the example config's `coolingTimeMs`/`threshold` bindings:
+Ask the agent to run one `spec_loop` call with a spec over the bridge's shipped action — candidate parameters write global-DB member start values, the bridge compiles, and the loop minimizes compile errors. For the example config's `coolingTimeMs`/`threshold` bindings:
 
 ```json
 {
@@ -27,7 +27,7 @@ Ask the agent to run one `spec_loop` call with a spec over the bridge's shipped 
   "budgets": { "maxIterations": 8 },
   "repair": { "margin": 1, "maxNoImprovement": 3 },
   "envelope": { "bounds": { "coolingTimeMs": { "min": 0, "max": 60000 }, "threshold": { "min": 0, "max": 100 } } },
-  "description": "coolingTimeMs and threshold are PLC tag start values set before the compile."
+  "description": "coolingTimeMs and threshold are global-DB member start values set before the compile."
 }
 ```
 

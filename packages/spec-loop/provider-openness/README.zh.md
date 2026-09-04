@@ -14,7 +14,7 @@
 
 桥使用纯 HTTP JSON。`GET /health` 报告就绪状态与环境四元组；`POST /validate` 接收 `{ params }` 并返回 `{ ok, reasons }`；`POST /run` 接收 `{ runId, params }` 并返回 `{ runId, status: success|diverged|infrastructure|killed, result?, licenseMs?, error?, environment? }`；`POST /cancel` 接收 `{ runId }` 且尽力而为——进行中的 Openness 调用无法被抢占。宿主不可用表现为 HTTP 503；已有 run 在飞时下一个 run 得到 409。
 
-随附动作的参数域由部署方定义：桥配置把每个参数键映射到一个 PLC 变量路径，run 把候选的数值写入这些变量的起始值并编译 PLC，结果携带 `{ compileErrors, compileWarnings, compileMs }`，编译墙钟时长同时作为 `licenseMs` 上报。
+随附动作的参数域由部署方定义：桥配置把每个参数键映射到一个全局数据块成员（`{ block, member, min, max }`），run 把候选的数值写入这些成员的起始值（V21 的动态 `StartValue` 属性）并编译 PLC，结果携带 `{ compileErrors, compileWarnings, compileMs }`，编译墙钟时长同时作为 `licenseMs` 上报。
 
 ## 配置
 

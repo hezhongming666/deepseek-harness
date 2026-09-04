@@ -29,7 +29,7 @@ const SPEC = {
   budgets: { maxIterations: 6, maxWallClockMs: 300_000 },
   repair: { margin: 1, maxNoImprovement: 3 },
   envelope: { bounds: { coolingTimeMs: { min: 0, max: 60000 }, threshold: { min: 0, max: 100 } } },
-  description: 'coolingTimeMs and threshold are PLC tag start values set before the compile.',
+  description: 'coolingTimeMs and threshold are global-DB member start values set before the compile.',
 }
 
 let root: string | undefined

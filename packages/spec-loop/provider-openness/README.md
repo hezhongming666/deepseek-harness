@@ -14,7 +14,7 @@ The **spec-loop adapter provider for Siemens TIA Portal Openness**. It registers
 
 The bridge speaks plain HTTP JSON. `GET /health` reports readiness and the environment tuple; `POST /validate` receives `{ params }` and returns `{ ok, reasons }`; `POST /run` receives `{ runId, params }` and returns `{ runId, status: success|diverged|infrastructure|killed, result?, licenseMs?, error?, environment? }`; `POST /cancel` receives `{ runId }` and is best effort, because an in-flight Openness call cannot be preempted. Host outages surface as HTTP 503; a run in flight makes the next one a 409.
 
-The shipped action's parameter domain is deployment-defined: the bridge config maps each parameter key to one PLC tag path, a run writes the candidate's numeric values into those tags' start values and compiles the PLC, and the result carries `{ compileErrors, compileWarnings, compileMs }` with compile wall time also reported as `licenseMs`.
+The shipped action's parameter domain is deployment-defined: the bridge config maps each parameter key to one global-DB member (`{ block, member, min, max }`), a run writes the candidate's numeric values into those members' start values (V21's dynamic `StartValue` attribute) and compiles the PLC, and the result carries `{ compileErrors, compileWarnings, compileMs }` with compile wall time also reported as `licenseMs`.
 
 ## Config
 
