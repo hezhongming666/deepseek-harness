@@ -10,6 +10,7 @@ using Siemens.Collaboration.Net;
 using Siemens.Engineering;
 using Siemens.Engineering.Compiler;
 using Siemens.Engineering.HW;
+using Siemens.Engineering.HW.Features;
 using Siemens.Engineering.SW;
 using Siemens.Engineering.SW.Tags;
 
@@ -114,6 +115,85 @@ namespace OpennessBridge
                 foreach (var item in device.DeviceItems)
                 {
                     output.WriteLine($"{device.Name}\t{item.GetType().FullName}\t{item.Name}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Print each device item's composition tree, marking PlcSoftware and
+        /// ICompilable objects: the diagnostic for locating the compile target
+        /// in V21's engineering-object model.
+        /// </summary>
+        /// <param name="output">The sink receiving the listing.</param>
+        public void ProbeSoftware(TextWriter output)
+        {
+            var opened = EnsureProject();
+            ProbeNode(output, "PROJECT", opened, 0);
+            foreach (var device in opened.Devices)
+            {
+                ProbeNode(output, device.Name, device, 0);
+                foreach (var item in device.DeviceItems)
+                {
+                    ProbeNode(output, $"{device.Name}/{item.Name}", item, 0);
+                }
+            }
+        }
+
+        /// <summary>Print one engineering object plus its composition tree, one level deep.</summary>
+        private static void ProbeNode(TextWriter output, string path, IEngineeringObject node, int depth)
+        {
+            output.WriteLine(
+                $"{path}: {node.GetType().FullName}"
+                + $" PlcSoftware={node is PlcSoftware} ICompilable={node is ICompilable}");
+            if (depth >= 3)
+            {
+                return;
+            }
+            foreach (var info in node.GetCompositionInfos())
+            {
+                object value;
+                try
+                {
+                    value = node.GetComposition(info.Name);
+                }
+                catch (Exception error)
+                {
+                    output.WriteLine($"  {info.Name}: threw {error.Message}");
+                    continue;
+                }
+                if (value == null)
+                {
+                    output.WriteLine($"  {info.Name}: null");
+                    continue;
+                }
+                if (value is System.Collections.IEnumerable entries && value is not string)
+                {
+                    var count = 0;
+                    foreach (var entry in entries)
+                    {
+                        if (entry is IEngineeringObject child)
+                        {
+                            ProbeNode(output, $"{path}/{info.Name}[{count}]", child, depth + 1);
+                        }
+                        else
+                        {
+                            output.WriteLine($"  {info.Name}[{count}]: {entry.GetType().FullName}");
+                        }
+                        count += 1;
+                        if (count >= 6)
+                        {
+                            output.WriteLine($"  ({info.Name} has more entries)");
+                            break;
+                        }
+                    }
+                }
+                else if (value is IEngineeringObject child)
+                {
+                    ProbeNode(output, $"{path}/{info.Name}", child, depth + 1);
+                }
+                else
+                {
+                    output.WriteLine($"  {info.Name}: {value.GetType().FullName}");
                 }
             }
         }
@@ -290,10 +370,19 @@ namespace OpennessBridge
             CompilerResult compileResult;
             try
             {
-                // V21 keeps the ICompilable seam; PlcSoftware implements it.
-                // The runtime smoke on the deployment project confirms the
-                // cast (the alternative is the CompileProvider service).
-                compileResult = ((ICompilable)session.Software).Compile();
+                // V21 exposes compile through the ICompilable service on the
+                // software object (see the Openness V21 project-data manual).
+                var compilable = session.Software.GetService<ICompilable>();
+                if (compilable == null)
+                {
+                    return new Wire.RunResponse
+                    {
+                        RunId = runId,
+                        Status = "diverged",
+                        Error = "the PLC software exposes no ICompilable service",
+                    };
+                }
+                compileResult = compilable.Compile();
             }
             catch (Exception error)
             {
@@ -542,9 +631,40 @@ namespace OpennessBridge
             }
             else
             {
-                device = opened.Devices.FirstOrDefault(candidate => candidate.DeviceItems.OfType<PlcSoftware>().Any());
+                device = opened.Devices.FirstOrDefault(candidate => FindPlcSoftware(candidate) != null);
             }
-            return device?.DeviceItems.OfType<PlcSoftware>().FirstOrDefault();
+            return device == null ? null : FindPlcSoftware(device);
+        }
+
+        /// <summary>
+        /// V21 hosts software behind the SoftwareContainer service on the
+        /// device item that carries it (the CPU); the walk recurses through
+        /// child items per the Openness V21 project-data manual.
+        /// </summary>
+        private static PlcSoftware? FindPlcSoftware(Device device)
+        {
+            foreach (var item in EnumerateDeviceItems(device.DeviceItems))
+            {
+                var container = item.GetService<SoftwareContainer>();
+                if (container?.Software is PlcSoftware software)
+                {
+                    return software;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>Depth-first device-item enumeration, children included.</summary>
+        private static IEnumerable<DeviceItem> EnumerateDeviceItems(DeviceItemComposition items)
+        {
+            foreach (var item in items)
+            {
+                yield return item;
+                foreach (var child in EnumerateDeviceItems(item.DeviceItems))
+                {
+                    yield return child;
+                }
+            }
         }
 
         private PlcTag? FindTag(string path)

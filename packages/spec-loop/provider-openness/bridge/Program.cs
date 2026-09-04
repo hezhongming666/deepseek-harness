@@ -45,7 +45,7 @@ namespace OpennessBridge
                 config.Port = options.Port.Value;
             }
             IOpennessHost host = CreateHost(config);
-            if (options.ListTags || options.ListDevices || options.FindDevice != null)
+            if (options.ListTags || options.ListDevices || options.FindDevice != null || options.ProbeSoftware)
             {
                 try
                 {
@@ -55,6 +55,7 @@ namespace OpennessBridge
                         if (options.ListDevices) opennessHost.ListDevices(Console.Out);
                         if (options.ListTags) opennessHost.ListTags(Console.Out);
                         if (options.FindDevice != null) opennessHost.FindDevices(Console.Out, options.FindDevice);
+                        if (options.ProbeSoftware) opennessHost.ProbeSoftware(Console.Out);
                         host.Dispose();
                         return 0;
                     }
@@ -65,7 +66,7 @@ namespace OpennessBridge
                     Console.Error.WriteLine(Flatten(error));
                     return 2;
                 }
-                Console.Error.WriteLine("--list-tags/--list-devices/--find-device require the full Openness build (not --fake)");
+                Console.Error.WriteLine("--list-tags/--list-devices/--find-device/--probe-software require the full Openness build (not --fake)");
                 return 2;
             }
             var shutdownRequested = new TaskCompletionSource<bool>();
@@ -131,6 +132,7 @@ namespace OpennessBridge
             public bool Fake { get; set; }
             public bool ListTags { get; set; }
             public bool ListDevices { get; set; }
+            public bool ProbeSoftware { get; set; }
             public string? FindDevice { get; set; }
             public int? Port { get; set; }
         }
@@ -154,6 +156,9 @@ namespace OpennessBridge
                         break;
                     case "--list-devices":
                         options.ListDevices = true;
+                        break;
+                    case "--probe-software":
+                        options.ProbeSoftware = true;
                         break;
                     case "--find-device":
                         index += 1;
