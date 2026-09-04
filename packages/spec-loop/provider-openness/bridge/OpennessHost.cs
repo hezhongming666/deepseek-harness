@@ -440,26 +440,42 @@ namespace OpennessBridge
             {
                 return new Wire.RunResponse { RunId = runId, Status = "killed", Error = "cancelled before execution" };
             }
+            Wire.RunResponse response;
             if (config.Action == "generate")
             {
-                return RunGenerate(runId, session, parameters, cancelled);
+                response = RunGenerate(runId, session, parameters, cancelled);
             }
-            if (config.Action == "import")
+            else if (config.Action == "import")
             {
-                return RunImport(runId, session, parameters, cancelled);
+                response = RunImport(runId, session, parameters, cancelled);
             }
-            if (config.Action == "export")
+            else if (config.Action == "export")
             {
-                return RunExport(runId, session, cancelled);
+                response = RunExport(runId, session, cancelled);
             }
-            var writeError = WriteStartValues(runId, session, parameters);
-            if (writeError != null)
+            else
             {
-                return writeError;
+                var writeError = WriteStartValues(runId, session, parameters);
+                if (writeError != null)
+                {
+                    return writeError;
+                }
+                response = config.Action == "online"
+                    ? RunOnline(runId, session, cancelled)
+                    : RunCompile(runId, session, cancelled);
             }
-            return config.Action == "online"
-                ? RunOnline(runId, session, cancelled)
-                : RunCompile(runId, session, cancelled);
+            if (response.Status == "success" && config.Save)
+            {
+                try
+                {
+                    session.Project.Save();
+                }
+                catch (Exception error)
+                {
+                    throw new InfrastructureException($"saving the project after a successful run failed: {error.Message}");
+                }
+            }
+            return response;
         }
 
         /// <summary>
@@ -973,9 +989,10 @@ namespace OpennessBridge
         }
 
         /// <summary>
-        /// Export the first object of the target kind to XML. V21 has no
-        /// ExportProvider and exports per-object (no group or whole-software
-        /// export), so a group target exports its first object.
+        /// Export one object of the target kind to XML, selected by
+        /// <see cref="ExportConfig.ObjectName"/> (empty selects the first).
+        /// V21 has no ExportProvider and exports per-object (no group or
+        /// whole-software export).
         /// </summary>
         private void ExportXml(Session session, string target, string filePath)
         {
@@ -984,20 +1001,32 @@ namespace OpennessBridge
             {
                 case "blocks":
                 {
-                    var block = session.Software.BlockGroup.Blocks.FirstOrDefault();
+                    var block = string.IsNullOrWhiteSpace(config.Export.ObjectName)
+                        ? session.Software.BlockGroup.Blocks.FirstOrDefault()
+                        : session.Software.BlockGroup.Blocks.Find(config.Export.ObjectName);
                     if (block == null)
                     {
-                        throw new InfrastructureException("no blocks to export");
+                        throw new InfrastructureException(
+                            $"no block to export"
+                            + (string.IsNullOrWhiteSpace(config.Export.ObjectName)
+                                ? string.Empty
+                                : $" named {JsonSerializer.Serialize(config.Export.ObjectName)}"));
                     }
                     block.Export(file, ExportOptions.WithDefaults);
                     return;
                 }
                 case "tagTables":
                 {
-                    var table = session.Software.TagTableGroup.TagTables.FirstOrDefault();
+                    var table = string.IsNullOrWhiteSpace(config.Export.ObjectName)
+                        ? session.Software.TagTableGroup.TagTables.FirstOrDefault()
+                        : session.Software.TagTableGroup.TagTables.Find(config.Export.ObjectName);
                     if (table == null)
                     {
-                        throw new InfrastructureException("no tag tables to export");
+                        throw new InfrastructureException(
+                            $"no tag table to export"
+                            + (string.IsNullOrWhiteSpace(config.Export.ObjectName)
+                                ? string.Empty
+                                : $" named {JsonSerializer.Serialize(config.Export.ObjectName)}"));
                     }
                     table.Export(file, ExportOptions.WithDefaults);
                     return;

@@ -48,7 +48,7 @@ OpennessBridge.exe --config bridge.json --list-tags      # print PLC tags (write
 OpennessBridge.exe --config bridge.json --find-device "1214C"  # catalog lookup (type identifiers)
 ```
 
-启动时桥在 stdout 打印恰好一行——`{"event":"listening","url":"http://127.0.0.1:<port>"}`——适配器的 spawn 模式等待这一行。配置字段：`port`（0 表示自动发现空闲端口）、`projectPath`、`mode`（`WithoutUserInterface` | `WithUserInterface`）、`device`（空表示选择第一个带 PLC 软件的设备）、`action`（`compile` | `online` | `generate` | `import` | `export`，默认 `compile`）、`simulation`（`modeName`、`interfaceName`、`interfaceNumber`、`targetInterface`——`online` 动作使用的 S7-PLCSIM 目标；`targetInterface` 为空表示选择第一个可用项）、`generate`（`blockName`、`source`——`generate` 动作使用的 SCL 模板）、`import`（`target`——`software` | `blocks` | `tagTables`，`source`——Openness XML）、`export`（`target`、`directory`）、`params`（参数键 → `{ block, member, min, max }` 全局 DB 成员绑定；`generate`/`import`/`export` 动作只使用 `min`/`max`），以及可选 `bootstrap` 块（`directory`、`projectName`、`deviceOrderNumber`、`deviceName`、`deviceVersion`）——当 `projectPath` 不存在时自动创建目录型工程并插入 PLC 设备。Openness 程序需要配套安装的 TIA Portal 与 run 动作所执行工程操作的许可证。
+启动时桥在 stdout 打印恰好一行——`{"event":"listening","url":"http://127.0.0.1:<port>"}`——适配器的 spawn 模式等待这一行。配置字段：`port`（0 表示自动发现空闲端口）、`projectPath`、`mode`（`WithoutUserInterface` | `WithUserInterface`）、`device`（空表示选择第一个带 PLC 软件的设备）、`action`（`compile` | `online` | `generate` | `import` | `export`，默认 `compile`）、`save`（成功运行后保存工程——默认 false，调参尝试留在会话内；`import` 这类批量编辑设 true 以持久化）、`simulation`（`modeName`、`interfaceName`、`interfaceNumber`、`targetInterface`——`online` 动作使用的 S7-PLCSIM 目标；`targetInterface` 为空表示选择第一个可用项）、`generate`（`blockName`、`source`——`generate` 动作使用的 SCL 模板）、`import`（`target`——`software` | `blocks` | `tagTables`，`source`——Openness XML）、`export`（`target`、`objectName`——空表示选择该类型第一个对象、`directory`）、`params`（参数键 → `{ block, member, min, max }` 全局 DB 成员绑定；`generate`/`import`/`export` 动作只使用 `min`/`max`），以及可选 `bootstrap` 块（`directory`、`projectName`、`deviceOrderNumber`、`deviceName`、`deviceVersion`）——当 `projectPath` 不存在时自动创建目录型工程并插入 PLC 设备。Openness 程序需要配套安装的 TIA Portal 与 run 动作所执行工程操作的许可证。
 
 ## 随附动作
 
@@ -57,34 +57,49 @@ OpennessBridge.exe --config bridge.json --find-device "1214C"  # catalog lookup 
 - `action: compile`（默认）——编译 PLC 并上报错误/警告数量。该动作的演示 spec 断言 `compileErrors lte 0` 并最小化 `compileErrors`。
 - `action: online`——把软件下载到 S7-PLCSIM 目标、上线，并通过 V21 的动态 `OnlineValue` 属性读回每个绑定成员的当前值。它上报 `{ downloadState, downloadMessages, onlineValues, readMs, downloadMs }`，把下载/在线读取失败映射为带清晰 `error` 的 `diverged` 状态。V21 没有 `SetInterfaceToPlcsim()` 辅助方法：目标通过连接配置的 `PLCSIM` PC 接口（默认编号 1）解析，如 Openness 手册所述；`simulation` 覆盖这些名称。下载回调处理标准的停止 / 一致性 / 全块 / 目标 / 重初始化与启动模块选择，并对任何未处理的配置失败关闭。
 - `action: generate`——渲染 `generate.source`（SCL 文本，其中的 `{{param}}` 占位符被替换为该参数的数值候选值，不变文化格式），导入/替换命名块，然后编译并上报编译字段加 `blockName`。模板走 V21 的外部源路线（`ExternalSourceGroup.ExternalSources.CreateFromFile` 再 `GenerateBlocksFromSource`），接受纯 SCL 文本、无需 Openness XML 包装，并覆盖同名既有块；渲染后的文本写入按 run 命名的临时文件并在导入后删除。未知占位符与导入/编译失败映射为 `diverged`。该动作的 `params` 映射只提供数值 `min`/`max` 域（无需 `block`/`member`）。
-- `action: import`——渲染 `import.source`（Openness 格式 XML，其中的 `{{param}}` 占位符被替换为该参数的数值候选值），导入目标组合，然后编译并上报编译字段加 `importedTarget`。V21 没有 `ImportProvider`：导入是组合级的 `Import(FileInfo, ImportOptions)` 方法——`blocks` 对应 `BlockGroup.Blocks`、`tagTables` 对应 `TagTableGroup.TagTables`——使用 `ImportOptions.Override`（覆盖既有）。`software` 目标在 V21 中没有导入方法，会以清晰的 infrastructure 错误失败。未知占位符与导入/编译失败映射为 `diverged`。该动作的 `params` 映射只提供 `min`/`max`。
-- `action: export`——把目标类型的第一个工程对象导出到 `<directory>\openness-export-<target>-<runId>.xml` 并上报 `{ exportPath, exportMs }`。V21 没有 `ExportProvider`，且按对象导出（`PlcBlock.Export` / `PlcTagTable.Export`，使用 `ExportOptions.WithDefaults`），因此组目标导出其第一个对象；`software` 目标在 V21 中没有导出方法。目录不存在时会被创建；导出失败映射为 `diverged`。这是 `import` 动作的实用往返配套工具，不是数值搜索目标。
+- `action: import`——渲染 `import.source`（Openness 格式 XML，其中的 `{{param}}` 占位符被替换为该参数的数值候选值），导入目标组合，然后编译并上报编译字段加 `importedTarget`。V21 没有 `ImportProvider`：导入是组合级的 `Import(FileInfo, ImportOptions)` 方法——`blocks` 对应 `BlockGroup.Blocks`、`tagTables` 对应 `TagTableGroup.TagTables`——使用 `ImportOptions.Override`（覆盖既有）。`software` 目标在 V21 中没有导入方法，会以清晰的 infrastructure 错误失败。未知占位符与导入/编译失败映射为 `diverged`。`save: true` 时导入的编辑持久化；否则改动只存在于会话内。已在 TIA Portal V21 真机验证：标签表与块的往返（导出 → 占位符编辑 → 导入 → 编译）均生效并持久化。
+- `action: export`——把目标类型的一个工程对象（`export.objectName`，空表示该类型第一个对象）导出到 `<directory>\openness-export-<target>-<runId>.xml` 并上报 `{ exportPath, exportMs }`。V21 没有 `ExportProvider`，且按对象导出（`PlcBlock.Export` / `PlcTagTable.Export`，使用 `ExportOptions.WithDefaults`）；`software` 目标在 V21 中没有导出方法。目录不存在时会被创建；导出失败映射为 `diverged`。这是 `import` 动作的实用往返配套工具，不是数值搜索目标。
 
 ### V21 导入 XML 格式（示例）
 
-`import` 动作消费 Openness 的 `<Document>` 导出格式；运行一次 `action: export` 即可获得工程的确切格式。一个含单个 `Int` 标签的最小标签表（V21 格式——属性拼写以实际导出为准，请通过导出确认）：
+`import` 动作消费 Openness 的 `<Document>` 导出格式；运行一次 `action: export` 即可获得工程的确切格式。下面的结构逐字取自一次真机 V21 `action: export`（完整导出还带 `<Engineering version="V21" />` 行与 `<DocumentInfo>` 段，导入同样接受；示例保留对象结构）：
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <Document>
+  <Engineering version="V21" />
   <SW.Tags.PlcTagTable ID="0">
     <AttributeList>
-      <Name>Diag</Name>
+      <Name>默认变量表</Name>
     </AttributeList>
     <ObjectList>
-      <SW.Tags.PlcTag ID="1">
+      <SW.Tags.PlcTag ID="1" CompositionName="Tags">
         <AttributeList>
-          <Name>counter</Name>
           <DataTypeName>Int</DataTypeName>
-          <LogicalAddress>%MW0</LogicalAddress>
-          <Comment><MultiLanguageText Lang="en-US">cycle counter</MultiLanguageText></Comment>
+          <ExternalAccessible>true</ExternalAccessible>
+          <ExternalVisible>true</ExternalVisible>
+          <ExternalWritable>true</ExternalWritable>
+          <LogicalAddress>%IW0</LogicalAddress>
+          <Name>threshold</Name>
         </AttributeList>
+        <ObjectList>
+          <MultilingualText ID="2" CompositionName="Comment">
+            <ObjectList>
+              <MultilingualTextItem ID="3" CompositionName="Items">
+                <AttributeList>
+                  <Culture>zh-CN</Culture>
+                  <Text />
+                </AttributeList>
+              </MultilingualTextItem>
+            </ObjectList>
+          </MultilingualText>
+        </ObjectList>
       </SW.Tags.PlcTag>
     </ObjectList>
   </SW.Tags.PlcTagTable>
 </Document>
 ```
 
-块与 DB 使用相同的 `<Document>` 包装（`<SW.Tags.PlcTagTable>` 换成 `<SW.Blocks.GlobalDB>`）。`import.source` 的占位符遵循同样的 `{{param}}` 规则，因此 XML 中的 `{{threshold}}` 会被替换为候选的数值。
+块使用相同的 `<Document>` 包装，根对象换成 `<SW.Blocks.FC>` / `<SW.Blocks.FB>` / `<SW.Blocks.GlobalDB>`；SCL 块的代码位于 `<SW.Blocks.CompileUnit>` 的 `<NetworkSource>` 中，以 `<StructuredText>` 令牌表达，数值 `<ConstantValue>` 元素是方便的 `{{param}}` 占位点。`import.source` 的占位符遵循同样的 `{{param}}` 规则，因此 XML 中的 `{{threshold}}` 会被替换为候选的数值。
 
 需要不同动作（工艺对象扫描、导出设置）的部署方扩展 C# 宿主；适配器与协议保持不变。

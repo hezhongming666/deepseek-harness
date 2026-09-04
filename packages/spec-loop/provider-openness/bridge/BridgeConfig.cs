@@ -81,15 +81,19 @@ namespace OpennessBridge
 
     /// <summary>
     /// The <c>export</c> action: <see cref="Target"/> names the kind of
-    /// engineering object to export, and <see cref="Directory"/> receives the
-    /// exported XML. V21 exposes export as object-level methods
-    /// (<c>PlcBlock.Export</c>, <c>PlcTagTable.Export</c>), so a group target
-    /// exports its first object.
+    /// engineering object to export, <see cref="ObjectName"/> selects one
+    /// object of that kind (empty selects the first), and
+    /// <see cref="Directory"/> receives the exported XML. V21 exposes export
+    /// as object-level methods (<c>PlcBlock.Export</c>,
+    /// <c>PlcTagTable.Export</c>).
     /// </summary>
     public sealed class ExportConfig
     {
         /// <summary>Export target: <c>blocks</c> or <c>tagTables</c> (<c>software</c> is unsupported by V21).</summary>
         public string Target { get; set; } = string.Empty;
+
+        /// <summary>Name of the object to export; empty selects the first of the target kind.</summary>
+        public string ObjectName { get; set; } = string.Empty;
 
         /// <summary>Destination directory for the exported XML file.</summary>
         public string Directory { get; set; } = string.Empty;
@@ -150,6 +154,13 @@ namespace OpennessBridge
 
         /// <summary>Simulation target settings; used only by the <c>online</c> action.</summary>
         public SimulationConfig Simulation { get; set; } = new SimulationConfig();
+
+        /// <summary>
+        /// Save the project after a successful run. Defaults to false (tuning
+        /// attempts stay in the session); deployments whose action is a batch
+        /// edit (e.g. import) set it true to persist the change.
+        /// </summary>
+        public bool Save { get; set; }
 
         /// <summary>SCL template settings; used only by the <c>generate</c> action.</summary>
         public GenerateConfig Generate { get; set; } = new GenerateConfig();
