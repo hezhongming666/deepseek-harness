@@ -7,14 +7,14 @@ The **spec-loop adapter provider for Siemens TIA Portal Openness**. It registers
 | Piece | Role |
 |---|---|
 | `OpennessSpecLoopAdapter` | The `specLoopAdapter` provider: `validate` (the S1 gate) and `run` (execution with cancellation) over HTTP JSON |
-| [bridge/](bridge/README.md) | Windows host process: keeps one TIA Portal V21 project open, serves the protocol on 127.0.0.1, and implements the shipped compile action (plus a deterministic `--fake` mode) |
+| [bridge/](bridge/README.md) | Windows host process: keeps one TIA Portal V21 project open, serves the protocol on 127.0.0.1, and implements the shipped `compile` and `online` (download + read-back) actions (plus a deterministic `--fake` mode) |
 | `src/wire.ts` | Hostile-input validation of every bridge response (the bridge is an external process) |
 
 ## The wire protocol
 
 The bridge speaks plain HTTP JSON. `GET /health` reports readiness and the environment tuple; `POST /validate` receives `{ params }` and returns `{ ok, reasons }`; `POST /run` receives `{ runId, params }` and returns `{ runId, status: success|diverged|infrastructure|killed, result?, licenseMs?, error?, environment? }`; `POST /cancel` receives `{ runId }` and is best effort, because an in-flight Openness call cannot be preempted. Host outages surface as HTTP 503; a run in flight makes the next one a 409.
 
-The shipped action's parameter domain is deployment-defined: the bridge config maps each parameter key to one global-DB member (`{ block, member, min, max }`), a run writes the candidate's numeric values into those members' start values (V21's dynamic `StartValue` attribute) and compiles the PLC, and the result carries `{ compileErrors, compileWarnings, compileMs }` with compile wall time also reported as `licenseMs`.
+The shipped actions' parameter domain is deployment-defined: the bridge config maps each parameter key to one global-DB member (`{ block, member, min, max }`), and a run writes the candidate's numeric values into those members' start values (V21's dynamic `StartValue` attribute) before running the configured action. The `compile` action (default) compiles the PLC and carries `{ compileErrors, compileWarnings, compileMs }`; the `online` action downloads to an S7-PLCSIM simulation target, goes online, and carries `{ downloadState, downloadMessages, onlineValues, readMs, downloadMs }`. The measured wall span is reported as `licenseMs`.
 
 ## Config
 
@@ -48,6 +48,6 @@ No direct invalidation; the named consumer owns any request-prefix changes.
 ## Known Limitations and Deferred Work
 
 - **No telemetry-stream early termination** — the bridge reports an outcome only when its Openness call settles; divergence is detected from the terminal compile result, not from incremental solver telemetry.
-- **The real Openness host is compile-verified, runtime machine-verified** — the repo build compiles the protocol layer and the fake host anywhere, and the TIA-bound host compiles against the installed V21 API on a TIA machine (the V21 software/compile/DB-member surfaces were aligned in-repo); a TIA Portal V21 machine with a STEP 7 Professional trial license verified the full runtime chain — headless open, global-DB member start-value write, compile, and a keyed `spec_loop` settling `satisfied` (see the [bridge README](bridge/README.md)).
+- **The real Openness host is compile-verified, runtime machine-verified for the compile action** — the repo build compiles the protocol layer and the fake host anywhere, and the TIA-bound host compiles against the installed V21 API on a TIA machine (the V21 software/compile/DB-member surfaces were aligned in-repo); a TIA Portal V21 machine with a STEP 7 Professional trial license verified the full compile-action chain — headless open, global-DB member start-value write, compile, and a keyed `spec_loop` settling `satisfied` (see the [bridge README](bridge/README.md)). The `online` action's download and read-back paths are compile-verified against V21; their runtime verification awaits an S7-PLCSIM installation on the TIA machine.
 - **Cancel cannot preempt Openness** — the `/cancel` call drops the result once the in-flight call settles; license time up to that point is still consumed.
 - **License accounting is compile wall time** — the bridge reports the compile's wall-clock span as `licenseMs`; a real license-pool ledger stays with the deployment.

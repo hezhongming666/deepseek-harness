@@ -4,6 +4,13 @@
   "projectPath": "C:\\Projects\\Demo\\Demo.ap21",
   "mode": "WithoutUserInterface",
   "device": "",
+  "action": "online",
+  "simulation": {
+    "modeName": "PN/IE",
+    "interfaceName": "PLCSIM",
+    "interfaceNumber": 1,
+    "targetInterface": ""
+  },
   "params": {
     "coolingTimeMs": { "block": "Diag", "member": "coolingTimeMs", "min": 0, "max": 60000 },
     "threshold": { "block": "Diag", "member": "threshold", "min": 0, "max": 100 }

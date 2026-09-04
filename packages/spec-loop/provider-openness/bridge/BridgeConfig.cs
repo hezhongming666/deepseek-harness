@@ -24,6 +24,29 @@ namespace OpennessBridge
     }
 
     /// <summary>
+    /// The simulation target for the <c>online</c> action. V21 has no
+    /// <c>SetInterfaceToPlcsim()</c> helper: the connection configuration
+    /// names the PLCSIM PC interface directly, so the bridge resolves the
+    /// target through <c>Modes.Find(ModeName).PcInterfaces.Find(InterfaceName,
+    /// InterfaceNumber)</c>. An empty <see cref="TargetInterface"/> selects the
+    /// first target interface on that PC interface.
+    /// </summary>
+    public sealed class SimulationConfig
+    {
+        /// <summary>Connection mode name, e.g. <c>PN/IE</c>.</summary>
+        public string ModeName { get; set; } = "PN/IE";
+
+        /// <summary>PC interface name, e.g. <c>PLCSIM</c> (the classic S7-PLCSIM interface).</summary>
+        public string InterfaceName { get; set; } = "PLCSIM";
+
+        /// <summary>PC interface number; classic S7-PLCSIM is number 1.</summary>
+        public int InterfaceNumber { get; set; } = 1;
+
+        /// <summary>Target interface (slot) name; empty selects the first available.</summary>
+        public string TargetInterface { get; set; } = string.Empty;
+    }
+
+    /// <summary>
     /// Optional self-provisioning: when the configured project does not exist,
     /// the real host creates a folder-based project and inserts one device
     /// (a PLC CPU order number also brings its PLC software along).
@@ -66,6 +89,16 @@ namespace OpennessBridge
         /// <summary>PLC device name; empty selects the first device with PLC software.</summary>
         public string Device { get; set; } = string.Empty;
 
+        /// <summary>
+        /// The shipped run action: <c>compile</c> (write start values then
+        /// compile; the default) or <c>online</c> (write start values, download
+        /// to the simulation target, go online, and read back online values).
+        /// </summary>
+        public string Action { get; set; } = "compile";
+
+        /// <summary>Simulation target settings; used only by the <c>online</c> action.</summary>
+        public SimulationConfig Simulation { get; set; } = new SimulationConfig();
+
         /// <summary>Parameter key to tag binding, with inclusive numeric bounds.</summary>
         public Dictionary<string, ParamBinding> Params { get; set; } = new Dictionary<string, ParamBinding>();
 
@@ -90,6 +123,22 @@ namespace OpennessBridge
             if (config.Mode != "WithoutUserInterface" && config.Mode != "WithUserInterface")
             {
                 throw new InvalidOperationException("config mode must be WithoutUserInterface or WithUserInterface");
+            }
+            if (config.Action != "compile" && config.Action != "online")
+            {
+                throw new InvalidOperationException("config action must be compile or online");
+            }
+            if (config.Action == "online")
+            {
+                var simulation = config.Simulation;
+                if (simulation == null
+                    || string.IsNullOrWhiteSpace(simulation.ModeName)
+                    || string.IsNullOrWhiteSpace(simulation.InterfaceName)
+                    || simulation.InterfaceNumber < 0)
+                {
+                    throw new InvalidOperationException(
+                        "config simulation requires modeName, interfaceName, and a non-negative interfaceNumber");
+                }
             }
             foreach (var entry in config.Params)
             {

@@ -9,11 +9,15 @@ using System.Text.Json;
 using Siemens.Collaboration.Net;
 using Siemens.Engineering;
 using Siemens.Engineering.Compiler;
+using Siemens.Engineering.Connection;
+using Siemens.Engineering.Download;
 using Siemens.Engineering.HW;
 using Siemens.Engineering.HW.Features;
+using Siemens.Engineering.Online;
 using Siemens.Engineering.SW;
 using Siemens.Engineering.SW.Blocks;
 using Siemens.Engineering.SW.Tags;
+using DownloadConfigurations = Siemens.Engineering.Download.Configurations;
 
 namespace OpennessBridge
 {
@@ -21,8 +25,10 @@ namespace OpennessBridge
     /// The TIA Portal Openness host. Opens the configured project once and
     /// keeps the session warm across requests: validate checks parameter keys
     /// and bounds against the config (the cheap S1 gate), run writes each
-    /// parameter to its bound tag's start value, compiles the PLC, and
-    /// reports compile error/warning counts plus the compile wall time.
+    /// parameter to its bound global-DB member's start value and then runs the
+    /// configured action — <c>compile</c> (compile the PLC, report
+    /// error/warning counts) or <c>online</c> (download to the simulation
+    /// target, go online, read back online values).
     ///
     /// This file compiles only with -p:WithOpenness=true against the
     /// installed TIA Portal V21 Openness API (see the csproj comment). API
@@ -38,6 +44,7 @@ namespace OpennessBridge
         private TiaPortal? portal;
         private Project? project;
         private PlcSoftware? plcSoftware;
+        private DeviceItem? cpuDeviceItem;
 
         public OpennessHost(BridgeConfig config)
         {
@@ -432,6 +439,26 @@ namespace OpennessBridge
             {
                 return new Wire.RunResponse { RunId = runId, Status = "killed", Error = "cancelled before execution" };
             }
+            var writeError = WriteStartValues(runId, session, parameters);
+            if (writeError != null)
+            {
+                return writeError;
+            }
+            return config.Action == "online"
+                ? RunOnline(runId, session, cancelled)
+                : RunCompile(runId, session, cancelled);
+        }
+
+        /// <summary>
+        /// Validate every parameter against the config and write its value to
+        /// the bound DB member's start value. Returns the diverged response on
+        /// the first failure, or null when every parameter was written.
+        /// </summary>
+        private Wire.RunResponse? WriteStartValues(
+            string runId,
+            Session session,
+            IReadOnlyDictionary<string, JsonElement> parameters)
+        {
             foreach (var entry in parameters)
             {
                 if (!config.Params.TryGetValue(entry.Key, out var binding))
@@ -480,6 +507,12 @@ namespace OpennessBridge
                     };
                 }
             }
+            return null;
+        }
+
+        /// <summary>The shipped compile action: compile the PLC and report error/warning counts.</summary>
+        private Wire.RunResponse RunCompile(string runId, Session session, Func<bool> cancelled)
+        {
             var stopwatch = Stopwatch.StartNew();
             CompilerResult compileResult;
             try
@@ -542,6 +575,325 @@ namespace OpennessBridge
             };
         }
 
+        /// <summary>
+        /// The shipped online action: write start values (done by the caller),
+        /// download the software to the simulation target, go online, and read
+        /// back the current online value of every bound DB member. Download and
+        /// online-read failures map to diverged; the reported state/messages
+        /// always reflect the download result.
+        /// </summary>
+        private Wire.RunResponse RunOnline(string runId, Session session, Func<bool> cancelled)
+        {
+            var total = Stopwatch.StartNew();
+            DownloadResult download;
+            try
+            {
+                download = DownloadToSimulation(session);
+            }
+            catch (InfrastructureException)
+            {
+                // Host-level (no provider, no PLCSIM interface): surface as
+                // HTTP 503 like the existing action, not as a diverged run.
+                throw;
+            }
+            catch (Exception error)
+            {
+                return new Wire.RunResponse
+                {
+                    RunId = runId,
+                    Status = "diverged",
+                    Error = $"download failed: {error.Message}",
+                    LicenseMs = total.ElapsedMilliseconds,
+                    Environment = session.Environment,
+                };
+            }
+            var downloadMs = total.ElapsedMilliseconds;
+            if (cancelled())
+            {
+                return new Wire.RunResponse { RunId = runId, Status = "killed", Error = "cancelled during execution" };
+            }
+
+            if (download.State == DownloadResultState.Error)
+            {
+                return new Wire.RunResponse
+                {
+                    RunId = runId,
+                    Status = "diverged",
+                    Error = $"download ended in state {download.State} with {download.ErrorCount} error(s)",
+                    Result = BuildOnlineResult(download, new Dictionary<string, JsonElement>(), downloadMs, 0),
+                    LicenseMs = total.ElapsedMilliseconds,
+                    Environment = session.Environment,
+                };
+            }
+
+            var readStopwatch = Stopwatch.StartNew();
+            Dictionary<string, JsonElement> onlineValues;
+            try
+            {
+                onlineValues = ReadOnlineValues(session);
+            }
+            catch (InfrastructureException)
+            {
+                // Host-level (no OnlineProvider, cannot go online): surface as
+                // HTTP 503, not as a diverged run.
+                throw;
+            }
+            catch (Exception error)
+            {
+                readStopwatch.Stop();
+                return new Wire.RunResponse
+                {
+                    RunId = runId,
+                    Status = "diverged",
+                    Error = $"online read failed: {error.Message}",
+                    Result = BuildOnlineResult(download, new Dictionary<string, JsonElement>(), downloadMs, readStopwatch.ElapsedMilliseconds),
+                    LicenseMs = total.ElapsedMilliseconds,
+                    Environment = session.Environment,
+                };
+            }
+            readStopwatch.Stop();
+            if (cancelled())
+            {
+                return new Wire.RunResponse { RunId = runId, Status = "killed", Error = "cancelled during execution" };
+            }
+
+            return new Wire.RunResponse
+            {
+                RunId = runId,
+                Status = "success",
+                Result = BuildOnlineResult(download, onlineValues, downloadMs, readStopwatch.ElapsedMilliseconds),
+                LicenseMs = total.ElapsedMilliseconds,
+                Environment = session.Environment,
+            };
+        }
+
+        /// <summary>Assemble the online action's result object.</summary>
+        private static Dictionary<string, JsonElement> BuildOnlineResult(
+            DownloadResult download,
+            Dictionary<string, JsonElement> onlineValues,
+            long downloadMs,
+            long readMs)
+        {
+            return new Dictionary<string, JsonElement>
+            {
+                ["downloadState"] = JsonSerializer.SerializeToElement(download.State.ToString()),
+                ["downloadMessages"] = JsonSerializer.SerializeToElement(FlattenDownloadMessages(download)),
+                ["onlineValues"] = JsonSerializer.SerializeToElement(onlineValues),
+                ["downloadMs"] = JsonSerializer.SerializeToElement(downloadMs),
+                ["readMs"] = JsonSerializer.SerializeToElement(readMs),
+            };
+        }
+
+        /// <summary>
+        /// Download the software to the configured simulation target. V21 has
+        /// no SetInterfaceToPlcsim() helper: the target is the PLCSIM PC
+        /// interface's target interface, resolved from the connection config.
+        /// </summary>
+        private DownloadResult DownloadToSimulation(Session session)
+        {
+            var provider = session.Cpu.GetService<DownloadProvider>();
+            if (provider == null)
+            {
+                throw new InfrastructureException(
+                    $"CPU device item {session.Cpu.Name} exposes no DownloadProvider service");
+            }
+            var target = ResolveSimulationTarget(provider.Configuration);
+            return provider.Download(target, ConfigurePreDownload, ConfigurePostDownload, DownloadOptions.Software);
+        }
+
+        /// <summary>
+        /// Resolve the simulation target interface through the connection
+        /// configuration. Classic S7-PLCSIM is the PLCSIM PC interface
+        /// (number 1); the target interface names the CPU slot, or the first
+        /// available when the config leaves it empty.
+        /// </summary>
+        private ConfigurationTargetInterface ResolveSimulationTarget(ConnectionConfiguration connection)
+        {
+            var simulation = config.Simulation;
+            var mode = connection.Modes.Find(simulation.ModeName);
+            if (mode == null)
+            {
+                throw new InfrastructureException(
+                    $"connection has no mode {JsonSerializer.Serialize(simulation.ModeName)}");
+            }
+            var pcInterface = mode.PcInterfaces.Find(simulation.InterfaceName, simulation.InterfaceNumber);
+            if (pcInterface == null)
+            {
+                throw new InfrastructureException(
+                    $"mode {simulation.ModeName} has no PC interface "
+                    + $"{simulation.InterfaceName}/{simulation.InterfaceNumber}");
+            }
+            if (!string.IsNullOrWhiteSpace(simulation.TargetInterface))
+            {
+                var named = pcInterface.TargetInterfaces.Find(simulation.TargetInterface);
+                if (named == null)
+                {
+                    throw new InfrastructureException(
+                        $"PC interface {simulation.InterfaceName} has no target interface "
+                        + $"{simulation.TargetInterface}");
+                }
+                return named;
+            }
+            var first = pcInterface.TargetInterfaces.FirstOrDefault();
+            if (first == null)
+            {
+                throw new InfrastructureException(
+                    $"PC interface {simulation.InterfaceName}/{simulation.InterfaceNumber} has no target interfaces");
+            }
+            return first;
+        }
+
+        /// <summary>
+        /// Pre-download callback: select each recognized configuration's safe
+        /// value and fail closed on any configuration this bridge has not
+        /// reviewed. Classic S7-PLCSIM presents as a CPU target.
+        /// </summary>
+        private static void ConfigurePreDownload(DownloadConfigurations.DownloadConfiguration configuration)
+        {
+            switch (configuration)
+            {
+                case DownloadConfigurations.StopModules stop:
+                    stop.CurrentSelection = DownloadConfigurations.StopModulesSelections.StopAll;
+                    return;
+                case DownloadConfigurations.ConsistentBlocksDownload consistent:
+                    consistent.CurrentSelection = DownloadConfigurations.ConsistentBlocksDownloadSelections.ConsistentDownload;
+                    return;
+                case DownloadConfigurations.AllBlocksDownload all:
+                    all.CurrentSelection = DownloadConfigurations.AllBlocksDownloadSelections.DownloadAllBlocks;
+                    return;
+                case DownloadConfigurations.TargetForSoftware target:
+                    // Classic S7-PLCSIM presents itself as a CPU; S7-PLCSIM
+                    // Advanced instances would use PlcSimulationAdvanced.
+                    target.CurrentSelection = DownloadConfigurations.TargetForSoftwareSelections.CPU;
+                    return;
+                case DownloadConfigurations.DataBlockReinitialization reinit:
+                    reinit.CurrentSelection = DownloadConfigurations.DataBlockReinitializationSelections.NoAction;
+                    return;
+                default:
+                    throw new NotSupportedException(
+                        $"download aborted: unhandled pre-download configuration {configuration.GetType().FullName}");
+            }
+        }
+
+        /// <summary>Post-download callback: restart the module after a successful download.</summary>
+        private static void ConfigurePostDownload(DownloadConfigurations.DownloadConfiguration configuration)
+        {
+            if (configuration is DownloadConfigurations.StartModules start)
+            {
+                start.CurrentSelection = DownloadConfigurations.StartModulesSelections.StartModule;
+                return;
+            }
+            throw new NotSupportedException(
+                $"download aborted: unhandled post-download configuration {configuration.GetType().FullName}");
+        }
+
+        /// <summary>
+        /// Go online and read the current (online) value of every bound DB
+        /// member via V21's dynamic OnlineValue attribute. The connection is
+        /// only taken offline when this call established it. Cancellation is
+        /// observed by the caller between the download and this read.
+        /// </summary>
+        private Dictionary<string, JsonElement> ReadOnlineValues(Session session)
+        {
+            var online = session.Cpu.GetService<OnlineProvider>();
+            if (online == null)
+            {
+                throw new InfrastructureException(
+                    $"CPU device item {session.Cpu.Name} exposes no OnlineProvider service");
+            }
+            if (!online.Configuration.IsConfigured)
+            {
+                online.Configuration.ApplyConfiguration(ResolveSimulationTarget(online.Configuration));
+            }
+            var connectedHere = online.State == OnlineState.Offline;
+            var state = online.GoOnline();
+            if (state != OnlineState.Online)
+            {
+                throw new InfrastructureException($"PLC ended in online state {state}");
+            }
+            try
+            {
+                var values = new Dictionary<string, JsonElement>();
+                foreach (var entry in config.Params)
+                {
+                    var member = FindMember(session.Software, entry.Value.Block, entry.Value.Member);
+                    if (member == null)
+                    {
+                        throw new InvalidOperationException(
+                            $"member {entry.Value.Block}.{entry.Value.Member} does not exist in PLC {session.Software.Name}");
+                    }
+                    object? raw;
+                    try
+                    {
+                        raw = member.GetAttribute("OnlineValue");
+                    }
+                    catch (Exception error)
+                    {
+                        throw new InvalidOperationException(
+                            $"reading online value of {entry.Value.Block}.{entry.Value.Member} failed: {error.Message}");
+                    }
+                    values[entry.Key] = OnlineValueElement(raw);
+                }
+                return values;
+            }
+            finally
+            {
+                if (connectedHere)
+                {
+                    try
+                    {
+                        online.GoOffline();
+                    }
+                    catch
+                    {
+                        // Disposal of the connection is best effort.
+                    }
+                }
+            }
+        }
+
+        /// <summary>Flatten the download result's nested messages into strings.</summary>
+        private static List<string> FlattenDownloadMessages(DownloadResult result)
+        {
+            var messages = new List<string>();
+            foreach (var message in result.Messages)
+            {
+                CollectDownloadMessages(message, messages);
+            }
+            return messages;
+        }
+
+        private static void CollectDownloadMessages(DownloadResultMessage message, List<string> messages)
+        {
+            messages.Add(message.Message);
+            foreach (var child in message.Messages)
+            {
+                CollectDownloadMessages(child, messages);
+            }
+        }
+
+        /// <summary>
+        /// Convert the online value attribute to a JSON element. Numeric values
+        /// (the parameter domain) are emitted as JSON numbers; anything else
+        /// falls back to its invariant string form.
+        /// </summary>
+        private static JsonElement OnlineValueElement(object? raw)
+        {
+            if (raw == null)
+            {
+                return JsonSerializer.SerializeToElement<string?>(null);
+            }
+            var text = raw is IFormattable formattable
+                ? formattable.ToString(null, CultureInfo.InvariantCulture)
+                : raw.ToString();
+            if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
+                && !double.IsNaN(number) && !double.IsInfinity(number))
+            {
+                return JsonSerializer.SerializeToElement(number);
+            }
+            return JsonSerializer.SerializeToElement(text ?? string.Empty);
+        }
+
         public void Dispose()
         {
             lock (gate)
@@ -565,6 +917,7 @@ namespace OpennessBridge
                 portal = null;
                 project = null;
                 plcSoftware = null;
+                cpuDeviceItem = null;
             }
             lock (resolverGate)
             {
@@ -582,10 +935,11 @@ namespace OpennessBridge
 
         private sealed class Session
         {
-            public Session(Project project, PlcSoftware software, string opennessVersion, Dictionary<string, string> environment)
+            public Session(Project project, PlcSoftware software, DeviceItem cpu, string opennessVersion, Dictionary<string, string> environment)
             {
                 Project = project;
                 Software = software;
+                Cpu = cpu;
                 OpennessVersion = opennessVersion;
                 Environment = environment;
             }
@@ -593,6 +947,9 @@ namespace OpennessBridge
             public Project Project { get; }
 
             public PlcSoftware Software { get; }
+
+            /// <summary>The CPU device item that carries the software; the download and online services live here.</summary>
+            public DeviceItem Cpu { get; }
 
             public string OpennessVersion { get; }
 
@@ -604,24 +961,31 @@ namespace OpennessBridge
             lock (gate)
             {
                 var opened = EnsureProject();
-                plcSoftware ??= FindPlcSoftware(opened);
                 if (plcSoftware == null)
                 {
-                    var inventory = new List<string>();
-                    foreach (var device in opened.Devices)
+                    var target = FindPlcTarget(opened);
+                    if (target == null)
                     {
-                        foreach (var item in device.DeviceItems)
+                        var inventory = new List<string>();
+                        foreach (var device in opened.Devices)
                         {
-                            inventory.Add($"{device.Name}/{item.GetType().Name}/{item.Name}");
+                            foreach (var item in device.DeviceItems)
+                            {
+                                inventory.Add($"{device.Name}/{item.GetType().Name}/{item.Name}");
+                            }
                         }
+                        throw new InfrastructureException(
+                            $"no PLC software found in project {JsonSerializer.Serialize(config.ProjectPath)}; "
+                            + $"device items: [{string.Join(", ", inventory)}]");
                     }
-                    throw new InfrastructureException(
-                        $"no PLC software found in project {JsonSerializer.Serialize(config.ProjectPath)}; "
-                        + $"device items: [{string.Join(", ", inventory)}]");
+                    plcSoftware = target.Software;
+                    cpuDeviceItem = target.Cpu;
                 }
                 return new Session(
                     opened,
                     plcSoftware,
+                    cpuDeviceItem
+                        ?? throw new InfrastructureException("no CPU device item resolved for the PLC software"),
                     portal?.GetType().Assembly.GetName().Version?.ToString() ?? "unknown",
                     new Dictionary<string, string>
                     {
@@ -731,7 +1095,7 @@ namespace OpennessBridge
             }
         }
 
-        private PlcSoftware? FindPlcSoftware(Project opened)
+        private PlcTarget? FindPlcTarget(Project opened)
         {
             Device? device = null;
             if (!string.IsNullOrWhiteSpace(config.Device))
@@ -745,27 +1109,42 @@ namespace OpennessBridge
             }
             else
             {
-                device = opened.Devices.FirstOrDefault(candidate => FindPlcSoftware(candidate) != null);
+                device = opened.Devices.FirstOrDefault(candidate => FindPlcTarget(candidate) != null);
             }
-            return device == null ? null : FindPlcSoftware(device);
+            return device == null ? null : FindPlcTarget(device);
         }
 
         /// <summary>
         /// V21 hosts software behind the SoftwareContainer service on the
         /// device item that carries it (the CPU); the walk recurses through
-        /// child items per the Openness V21 project-data manual.
+        /// child items per the Openness V21 project-data manual. The returned
+        /// pair also carries the CPU item because V21 exposes the download and
+        /// online providers on that item, not on the software object.
         /// </summary>
-        private static PlcSoftware? FindPlcSoftware(Device device)
+        private static PlcTarget? FindPlcTarget(Device device)
         {
             foreach (var item in EnumerateDeviceItems(device.DeviceItems))
             {
                 var container = item.GetService<SoftwareContainer>();
                 if (container?.Software is PlcSoftware software)
                 {
-                    return software;
+                    return new PlcTarget(software, item);
                 }
             }
             return null;
+        }
+
+        private sealed class PlcTarget
+        {
+            public PlcTarget(PlcSoftware software, DeviceItem cpu)
+            {
+                Software = software;
+                Cpu = cpu;
+            }
+
+            public PlcSoftware Software { get; }
+
+            public DeviceItem Cpu { get; }
         }
 
         /// <summary>Depth-first device-item enumeration, children included.</summary>

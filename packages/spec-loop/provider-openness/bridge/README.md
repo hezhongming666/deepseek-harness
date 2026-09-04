@@ -8,7 +8,7 @@ The bridge process behind `@deepseek-ai/dsh-provider-openness`: a Windows host t
 
 - `GET /health` — readiness plus the environment tuple (`softwareVersion`, `osKernel`).
 - `POST /validate` — the cheap S1 gate: parameter keys and inclusive numeric bounds against the config; no compile, no project writes.
-- `POST /run` — the shipped action: write each parameter to its bound global-DB member's start value, compile the PLC, and report `{ compileErrors, compileWarnings, compileMs }`. Compile wall time is also reported as `licenseMs` (the license-consuming span the bridge can measure).
+- `POST /run` — the shipped actions. `action: compile` (the default) writes each parameter to its bound global-DB member's start value, compiles the PLC, and reports `{ compileErrors, compileWarnings, compileMs }`. `action: online` writes the same start values, downloads the software to the simulation target, goes online, and reports `{ downloadState, downloadMessages, onlineValues, readMs, downloadMs }`. The measured wall span is reported as `licenseMs` (the license-consuming span the bridge can measure).
 - `POST /cancel` — best effort: an in-flight Openness call cannot be preempted, so the bridge drops the result when the cancelled run settles.
 
 Runs are serialized (HTTP 409 when one is in flight); host outages surface as HTTP 503, which the adapter classifies as S3.
@@ -19,6 +19,7 @@ Runs are serialized (HTTP 409 when one is in flight); host outages surface as HT
 - The bridge resolves `Siemens.Engineering.*` at runtime from the installed TIA Portal through the official `Siemens.Collaboration.Net.TiaPortal.Openness.Resolver` packages; Copy Local stays off for the Openness assemblies (TIA's own loader rejects local copies).
 - TIA Portal V21 and its Openness option must be installed. Creating a device and compiling needs a **STEP 7 Basic/Professional license** in the Automation License Manager pool (a TIA Portal trial license also satisfies it); without one, `CreateWithItem` and compile fail with `LicenseNotFoundException`.
 - The run action's project needs a PLC device: configure `bootstrap` to create one automatically, or point `projectPath` at an existing project that contains one.
+- The `online` action downloads to a simulated CPU and reads back online values, so it needs S7-PLCSIM (V21) installed and the classic `PLCSIM` interface available; a physical PLC is not required.
 
 ## Build
 
@@ -35,7 +36,7 @@ dotnet build OpennessBridge.csproj -c Release -p:WithOpenness=true ^
   -p:OpennessApiDir="C:\Program Files\Siemens\Automation\Portal V21\PublicAPI\V21\net48"
 ```
 
-The default `OpennessApiDir` matches the standard V21 install layout; adjust it to the machine. The Openness host (`OpennessHost.cs`) compiles only in the full build; its API usage compiles against the real V21 reference assemblies, while the runtime write-back and compile paths are smoke-tested on the deployment machine against a project copy.
+The default `OpennessApiDir` matches the standard V21 install layout; adjust it to the machine. The Openness host (`OpennessHost.cs`) compiles only in the full build; its API usage compiles against the real V21 reference assemblies, while the runtime write-back, compile, download, and online-read paths are smoke-tested on the deployment machine against a project copy.
 
 ## Run
 
@@ -47,8 +48,13 @@ OpennessBridge.exe --config bridge.json --list-tags      # print PLC tags (write
 OpennessBridge.exe --config bridge.json --find-device "1214C"  # catalog lookup (type identifiers)
 ```
 
-On startup the bridge prints exactly one stdout line — `{"event":"listening","url":"http://127.0.0.1:<port>"}` — which the adapter's spawn mode waits for. Config fields: `port` (0 discovers a free port), `projectPath`, `mode` (`WithoutUserInterface` | `WithUserInterface`), `device` (empty selects the first device with PLC software), `params` (parameter key → `{ block, member, min, max }` global-DB member bindings), and the optional `bootstrap` block (`directory`, `projectName`, `deviceOrderNumber`, `deviceName`, `deviceVersion`) that creates a folder-based project with a PLC device when `projectPath` does not exist. Openness programs need a matching TIA Portal installation and a license for the project operations the run action performs.
+On startup the bridge prints exactly one stdout line — `{"event":"listening","url":"http://127.0.0.1:<port>"}` — which the adapter's spawn mode waits for. Config fields: `port` (0 discovers a free port), `projectPath`, `mode` (`WithoutUserInterface` | `WithUserInterface`), `device` (empty selects the first device with PLC software), `action` (`compile` | `online`, default `compile`), `simulation` (`modeName`, `interfaceName`, `interfaceNumber`, `targetInterface` — the S7-PLCSIM target used by the `online` action; an empty `targetInterface` selects the first available), `params` (parameter key → `{ block, member, min, max }` global-DB member bindings), and the optional `bootstrap` block (`directory`, `projectName`, `deviceOrderNumber`, `deviceName`, `deviceVersion`) that creates a folder-based project with a PLC device when `projectPath` does not exist. Openness programs need a matching TIA Portal installation and a license for the project operations the run action performs.
 
-## Shipped action
+## Shipped actions
 
-The parameter domain is deployment-defined through the config's `params` map: each parameter key binds to one global data block member, and a run writes the candidate's numeric values into those members' start values (V21's dynamic `StartValue` attribute) before compiling. The demo spec for this action asserts `compileErrors lte 0` and minimizes `compileErrors`. Deployments that need a different action (technology-object sweeps, export settings) extend the C# host; the adapter and the protocol stay unchanged.
+The parameter domain is deployment-defined through the config's `params` map: each parameter key binds to one global data block member, and a run writes the candidate's numeric values into those members' start values (V21's dynamic `StartValue` attribute).
+
+- `action: compile` (default) — compiles the PLC and reports error/warning counts. The demo spec for this action asserts `compileErrors lte 0` and minimizes `compileErrors`.
+- `action: online` — downloads the software to the S7-PLCSIM target, goes online, and reads back each bound member's current value through V21's dynamic `OnlineValue` attribute. It reports `{ downloadState, downloadMessages, onlineValues, readMs, downloadMs }` and maps download/online failures to a `diverged` status with a clear `error`. V21 has no `SetInterfaceToPlcsim()` helper: the target is resolved through the connection configuration's `PLCSIM` PC interface (number 1 by default), as documented in the Openness manual; `simulation` overrides those names. The download callbacks handle the standard stop / consistent / all-blocks / target / reinitialization and start-module selections and fail closed on any unhandled configuration.
+
+Deployments that need a different action (technology-object sweeps, export settings) extend the C# host; the adapter and the protocol stay unchanged.
