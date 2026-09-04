@@ -6,6 +6,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Siemens.Collaboration.Net;
 using Siemens.Engineering;
 using Siemens.Engineering.Compiler;
@@ -439,6 +440,10 @@ namespace OpennessBridge
             {
                 return new Wire.RunResponse { RunId = runId, Status = "killed", Error = "cancelled before execution" };
             }
+            if (config.Action == "generate")
+            {
+                return RunGenerate(runId, session, parameters, cancelled);
+            }
             var writeError = WriteStartValues(runId, session, parameters);
             if (writeError != null)
             {
@@ -513,56 +518,11 @@ namespace OpennessBridge
         /// <summary>The shipped compile action: compile the PLC and report error/warning counts.</summary>
         private Wire.RunResponse RunCompile(string runId, Session session, Func<bool> cancelled)
         {
-            var stopwatch = Stopwatch.StartNew();
-            CompilerResult compileResult;
-            try
+            var (failure, result, compileMs) = CompileSoftware(runId, session, cancelled);
+            if (failure != null)
             {
-                // V21 exposes compile through the ICompilable service on the
-                // software object (see the Openness V21 project-data manual).
-                var compilable = session.Software.GetService<ICompilable>();
-                if (compilable == null)
-                {
-                    return new Wire.RunResponse
-                    {
-                        RunId = runId,
-                        Status = "diverged",
-                        Error = "the PLC software exposes no ICompilable service",
-                    };
-                }
-                compileResult = compilable.Compile();
+                return failure;
             }
-            catch (Exception error)
-            {
-                return new Wire.RunResponse
-                {
-                    RunId = runId,
-                    Status = "diverged",
-                    Error = $"compile threw: {error.Message}",
-                };
-            }
-            stopwatch.Stop();
-            if (cancelled())
-            {
-                return new Wire.RunResponse { RunId = runId, Status = "killed", Error = "cancelled during execution" };
-            }
-            var compileMs = stopwatch.ElapsedMilliseconds;
-            var errors = compileResult.ErrorCount;
-            var warnings = compileResult.WarningCount;
-            if (compileResult.State != CompilerResultState.Success)
-            {
-                return new Wire.RunResponse
-                {
-                    RunId = runId,
-                    Status = "diverged",
-                    Error = $"compile ended in state {compileResult.State} with {errors} error(s)",
-                };
-            }
-            var result = new Dictionary<string, JsonElement>
-            {
-                ["compileErrors"] = JsonDocument.Parse(errors.ToString(CultureInfo.InvariantCulture)).RootElement.Clone(),
-                ["compileWarnings"] = JsonDocument.Parse(warnings.ToString(CultureInfo.InvariantCulture)).RootElement.Clone(),
-                ["compileMs"] = JsonDocument.Parse(compileMs.ToString(CultureInfo.InvariantCulture)).RootElement.Clone(),
-            };
             return new Wire.RunResponse
             {
                 RunId = runId,
@@ -573,6 +533,245 @@ namespace OpennessBridge
                 LicenseMs = compileMs,
                 Environment = session.Environment,
             };
+        }
+
+        /// <summary>
+        /// Compile the PLC software and return the compile result fields plus
+        /// the compile wall time, or a diverged/killed response on failure.
+        /// Shared by the compile and generate actions.
+        /// </summary>
+        private (Wire.RunResponse? failure, Dictionary<string, JsonElement>? result, long compileMs) CompileSoftware(
+            string runId,
+            Session session,
+            Func<bool> cancelled)
+        {
+            var stopwatch = Stopwatch.StartNew();
+            CompilerResult compileResult;
+            try
+            {
+                // V21 exposes compile through the ICompilable service on the
+                // software object (see the Openness V21 project-data manual).
+                var compilable = session.Software.GetService<ICompilable>();
+                if (compilable == null)
+                {
+                    return (
+                        new Wire.RunResponse
+                        {
+                            RunId = runId,
+                            Status = "diverged",
+                            Error = "the PLC software exposes no ICompilable service",
+                        },
+                        null,
+                        0);
+                }
+                compileResult = compilable.Compile();
+            }
+            catch (Exception error)
+            {
+                return (
+                    new Wire.RunResponse
+                    {
+                        RunId = runId,
+                        Status = "diverged",
+                        Error = $"compile threw: {error.Message}",
+                    },
+                    null,
+                    0);
+            }
+            stopwatch.Stop();
+            if (cancelled())
+            {
+                return (
+                    new Wire.RunResponse { RunId = runId, Status = "killed", Error = "cancelled during execution" },
+                    null,
+                    0);
+            }
+            var compileMs = stopwatch.ElapsedMilliseconds;
+            var errors = compileResult.ErrorCount;
+            var warnings = compileResult.WarningCount;
+            if (compileResult.State != CompilerResultState.Success)
+            {
+                return (
+                    new Wire.RunResponse
+                    {
+                        RunId = runId,
+                        Status = "diverged",
+                        Error = $"compile ended in state {compileResult.State} with {errors} error(s)",
+                    },
+                    null,
+                    0);
+            }
+            var result = new Dictionary<string, JsonElement>
+            {
+                ["compileErrors"] = JsonDocument.Parse(errors.ToString(CultureInfo.InvariantCulture)).RootElement.Clone(),
+                ["compileWarnings"] = JsonDocument.Parse(warnings.ToString(CultureInfo.InvariantCulture)).RootElement.Clone(),
+                ["compileMs"] = JsonDocument.Parse(compileMs.ToString(CultureInfo.InvariantCulture)).RootElement.Clone(),
+            };
+            return (null, result, compileMs);
+        }
+
+        /// <summary>
+        /// The shipped generate action: render the SCL template with the
+        /// candidate's numeric values, import/replace the named block through
+        /// the external-source route, then compile. Reports the compile fields
+        /// plus the generated block name.
+        /// </summary>
+        private Wire.RunResponse RunGenerate(
+            string runId,
+            Session session,
+            IReadOnlyDictionary<string, JsonElement> parameters,
+            Func<bool> cancelled)
+        {
+            var generate = config.Generate;
+            var total = Stopwatch.StartNew();
+
+            string rendered;
+            try
+            {
+                rendered = RenderTemplate(generate.Source, parameters);
+            }
+            catch (Exception error)
+            {
+                return new Wire.RunResponse
+                {
+                    RunId = runId,
+                    Status = "diverged",
+                    Error = error.Message,
+                    Environment = session.Environment,
+                };
+            }
+            if (cancelled())
+            {
+                return new Wire.RunResponse { RunId = runId, Status = "killed", Error = "cancelled during execution" };
+            }
+
+            var tempPath = Path.Combine(
+                Path.GetTempPath(),
+                $"openness-bridge-{SanitizeFileToken(generate.BlockName)}-{SanitizeFileToken(runId)}.scl");
+            try
+            {
+                File.WriteAllText(tempPath, rendered);
+                ImportExternalSource(session, generate.BlockName, tempPath);
+            }
+            catch (InfrastructureException)
+            {
+                throw;
+            }
+            catch (Exception error)
+            {
+                return new Wire.RunResponse
+                {
+                    RunId = runId,
+                    Status = "diverged",
+                    Error = $"generating block {JsonSerializer.Serialize(generate.BlockName)} failed: {error.Message}",
+                    Environment = session.Environment,
+                };
+            }
+            finally
+            {
+                try
+                {
+                    File.Delete(tempPath);
+                }
+                catch
+                {
+                    // Best-effort temp-file cleanup.
+                }
+            }
+            if (cancelled())
+            {
+                return new Wire.RunResponse { RunId = runId, Status = "killed", Error = "cancelled during execution" };
+            }
+
+            var (failure, result, _) = CompileSoftware(runId, session, cancelled);
+            if (failure != null)
+            {
+                return failure;
+            }
+            result!["blockName"] = JsonSerializer.SerializeToElement(generate.BlockName);
+            total.Stop();
+            return new Wire.RunResponse
+            {
+                RunId = runId,
+                Status = "success",
+                Result = result,
+                LicenseMs = total.ElapsedMilliseconds,
+                Environment = session.Environment,
+            };
+        }
+
+        /// <summary>
+        /// Replace every <c>{{paramKey}}</c> placeholder with that param's
+        /// numeric candidate value (invariant culture). A placeholder whose key
+        /// is not a declared param, or whose candidate value is missing or
+        /// non-numeric, is a divergence.
+        /// </summary>
+        private string RenderTemplate(string template, IReadOnlyDictionary<string, JsonElement> parameters)
+        {
+            return Regex.Replace(template, @"\{\{([^{}]+?)\}\}", match =>
+            {
+                var key = match.Groups[1].Value.Trim();
+                if (!config.Params.ContainsKey(key))
+                {
+                    throw new InvalidOperationException(
+                        $"template placeholder {JsonSerializer.Serialize(key)} is not a declared parameter");
+                }
+                if (!parameters.TryGetValue(key, out var value)
+                    || value.ValueKind != JsonValueKind.Number
+                    || !value.TryGetDouble(out var number))
+                {
+                    throw new InvalidOperationException(
+                        $"template placeholder {JsonSerializer.Serialize(key)} has no numeric candidate value");
+                }
+                return number.ToString(CultureInfo.InvariantCulture);
+            });
+        }
+
+        /// <summary>
+        /// Import the rendered SCL file as an external source and generate the
+        /// block(s) from it. V21's external-source route takes plain SCL text
+        /// (no Openness XML wrapper) and overwrites existing blocks with the
+        /// same name. The external source object is deleted afterwards; the
+        /// generated block remains in the block group.
+        /// </summary>
+        private void ImportExternalSource(Session session, string blockName, string tempPath)
+        {
+            var sources = session.Software.ExternalSourceGroup.ExternalSources;
+            var stale = sources.Find(blockName);
+            stale?.Delete();
+            var source = sources.CreateFromFile(blockName, tempPath);
+            try
+            {
+                source.GenerateBlocksFromSource();
+            }
+            finally
+            {
+                try
+                {
+                    source.Delete();
+                }
+                catch
+                {
+                    // Best-effort cleanup of the external source object.
+                }
+            }
+            if (session.Software.BlockGroup.Blocks.Find(blockName) == null)
+            {
+                throw new InvalidOperationException(
+                    $"block {JsonSerializer.Serialize(blockName)} was not generated from the source");
+            }
+        }
+
+        /// <summary>Replace path-unsafe characters so a name can seed a temp-file name.</summary>
+        private static string SanitizeFileToken(string value)
+        {
+            var invalid = Path.GetInvalidFileNameChars();
+            var chars = new char[value.Length];
+            for (var index = 0; index < value.Length; index += 1)
+            {
+                chars[index] = Array.IndexOf(invalid, value[index]) >= 0 ? '_' : value[index];
+            }
+            return new string(chars);
         }
 
         /// <summary>

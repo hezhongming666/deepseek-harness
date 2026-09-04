@@ -47,6 +47,22 @@ namespace OpennessBridge
     }
 
     /// <summary>
+    /// The <c>generate</c> action's SCL template: <see cref="BlockName"/> names
+    /// the block the source declares, and <see cref="Source"/> is SCL text in
+    /// which each <c>{{paramKey}}</c> placeholder is replaced by that param's
+    /// numeric candidate value before import. The template travels the
+    /// external-source route (plain SCL, no Openness XML wrapper).
+    /// </summary>
+    public sealed class GenerateConfig
+    {
+        /// <summary>Name of the block the SCL source declares.</summary>
+        public string BlockName { get; set; } = string.Empty;
+
+        /// <summary>SCL source text with <c>{{paramKey}}</c> placeholders.</summary>
+        public string Source { get; set; } = string.Empty;
+    }
+
+    /// <summary>
     /// Optional self-provisioning: when the configured project does not exist,
     /// the real host creates a folder-based project and inserts one device
     /// (a PLC CPU order number also brings its PLC software along).
@@ -91,13 +107,18 @@ namespace OpennessBridge
 
         /// <summary>
         /// The shipped run action: <c>compile</c> (write start values then
-        /// compile; the default) or <c>online</c> (write start values, download
-        /// to the simulation target, go online, and read back online values).
+        /// compile; the default), <c>online</c> (write start values, download
+        /// to the simulation target, go online, and read back online values),
+        /// or <c>generate</c> (render an SCL template, import the block, and
+        /// compile).
         /// </summary>
         public string Action { get; set; } = "compile";
 
         /// <summary>Simulation target settings; used only by the <c>online</c> action.</summary>
         public SimulationConfig Simulation { get; set; } = new SimulationConfig();
+
+        /// <summary>SCL template settings; used only by the <c>generate</c> action.</summary>
+        public GenerateConfig Generate { get; set; } = new GenerateConfig();
 
         /// <summary>Parameter key to tag binding, with inclusive numeric bounds.</summary>
         public Dictionary<string, ParamBinding> Params { get; set; } = new Dictionary<string, ParamBinding>();
@@ -124,9 +145,9 @@ namespace OpennessBridge
             {
                 throw new InvalidOperationException("config mode must be WithoutUserInterface or WithUserInterface");
             }
-            if (config.Action != "compile" && config.Action != "online")
+            if (config.Action != "compile" && config.Action != "online" && config.Action != "generate")
             {
-                throw new InvalidOperationException("config action must be compile or online");
+                throw new InvalidOperationException("config action must be compile, online, or generate");
             }
             if (config.Action == "online")
             {
@@ -140,13 +161,25 @@ namespace OpennessBridge
                         "config simulation requires modeName, interfaceName, and a non-negative interfaceNumber");
                 }
             }
+            if (config.Action == "generate")
+            {
+                var generate = config.Generate;
+                if (generate == null
+                    || string.IsNullOrWhiteSpace(generate.BlockName)
+                    || string.IsNullOrWhiteSpace(generate.Source))
+                {
+                    throw new InvalidOperationException(
+                        "config generate requires non-empty blockName and source");
+                }
+            }
             foreach (var entry in config.Params)
             {
                 if (string.IsNullOrWhiteSpace(entry.Key))
                 {
                     throw new InvalidOperationException("config param keys must be non-empty strings");
                 }
-                if (string.IsNullOrWhiteSpace(entry.Value.Block) || string.IsNullOrWhiteSpace(entry.Value.Member))
+                if (config.Action != "generate"
+                    && (string.IsNullOrWhiteSpace(entry.Value.Block) || string.IsNullOrWhiteSpace(entry.Value.Member)))
                 {
                     throw new InvalidOperationException(
                         $"config param {entry.Key} requires non-empty block and member names");

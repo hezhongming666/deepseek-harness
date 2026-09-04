@@ -8,7 +8,7 @@
 
 - `GET /health`——就绪状态与环境四元组（`softwareVersion`、`osKernel`）。
 - `POST /validate`——廉价的 S1 关卡：按配置检查参数键与闭区间数值边界；不编译、不写工程。
-- `POST /run`——随附动作。`action: compile`（默认）把每个参数写入其绑定的全局数据块成员的起始值，编译 PLC，上报 `{ compileErrors, compileWarnings, compileMs }`。`action: online` 写入相同的起始值，把软件下载到仿真目标、上线，上报 `{ downloadState, downloadMessages, onlineValues, readMs, downloadMs }`。测量的墙钟时长同时作为 `licenseMs`（桥能测量的耗许可跨度）上报。
+- `POST /run`——随附动作。`action: compile`（默认）把每个参数写入其绑定的全局数据块成员的起始值，编译 PLC，上报 `{ compileErrors, compileWarnings, compileMs }`。`action: online` 写入相同的起始值，把软件下载到仿真目标、上线，上报 `{ downloadState, downloadMessages, onlineValues, readMs, downloadMs }`。`action: generate` 渲染配置里的 SCL 模板（把每个 `{{param}}` 占位符替换为候选的数值）、导入/替换命名块、编译，并上报编译字段加 `blockName`。测量的墙钟时长同时作为 `licenseMs`（桥能测量的耗许可跨度）上报。
 - `POST /cancel`——尽力而为：进行中的 Openness 调用无法被抢占，桥在被取消的 run 结束时丢弃其结果。
 
 run 串行执行（在飞时返回 HTTP 409）；宿主不可用表现为 HTTP 503，适配器将其归类为 S3。
@@ -36,7 +36,7 @@ dotnet build OpennessBridge.csproj -c Release -p:WithOpenness=true ^
   -p:OpennessApiDir="C:\Program Files\Siemens\Automation\Portal V21\PublicAPI\V21\net48"
 ```
 
-默认 `OpennessApiDir` 与 V21 标准安装布局一致；按机器调整即可。Openness 宿主（`OpennessHost.cs`）只在完整构建中编译；其 API 用法已针对真实 V21 参考程序集编译通过，运行期的写入、编译、下载与在线读取路径在部署机上用工程副本冒烟验证。
+默认 `OpennessApiDir` 与 V21 标准安装布局一致；按机器调整即可。Openness 宿主（`OpennessHost.cs`）只在完整构建中编译；其 API 用法已针对真实 V21 参考程序集编译通过，运行期的写入、编译、下载、在线读取与块生成路径在部署机上用工程副本冒烟验证。
 
 ## 运行
 
@@ -48,7 +48,7 @@ OpennessBridge.exe --config bridge.json --list-tags      # print PLC tags (write
 OpennessBridge.exe --config bridge.json --find-device "1214C"  # catalog lookup (type identifiers)
 ```
 
-启动时桥在 stdout 打印恰好一行——`{"event":"listening","url":"http://127.0.0.1:<port>"}`——适配器的 spawn 模式等待这一行。配置字段：`port`（0 表示自动发现空闲端口）、`projectPath`、`mode`（`WithoutUserInterface` | `WithUserInterface`）、`device`（空表示选择第一个带 PLC 软件的设备）、`action`（`compile` | `online`，默认 `compile`）、`simulation`（`modeName`、`interfaceName`、`interfaceNumber`、`targetInterface`——`online` 动作使用的 S7-PLCSIM 目标；`targetInterface` 为空表示选择第一个可用项）、`params`（参数键 → `{ block, member, min, max }` 全局 DB 成员绑定），以及可选 `bootstrap` 块（`directory`、`projectName`、`deviceOrderNumber`、`deviceName`、`deviceVersion`）——当 `projectPath` 不存在时自动创建目录型工程并插入 PLC 设备。Openness 程序需要配套安装的 TIA Portal 与 run 动作所执行工程操作的许可证。
+启动时桥在 stdout 打印恰好一行——`{"event":"listening","url":"http://127.0.0.1:<port>"}`——适配器的 spawn 模式等待这一行。配置字段：`port`（0 表示自动发现空闲端口）、`projectPath`、`mode`（`WithoutUserInterface` | `WithUserInterface`）、`device`（空表示选择第一个带 PLC 软件的设备）、`action`（`compile` | `online` | `generate`，默认 `compile`）、`simulation`（`modeName`、`interfaceName`、`interfaceNumber`、`targetInterface`——`online` 动作使用的 S7-PLCSIM 目标；`targetInterface` 为空表示选择第一个可用项）、`generate`（`blockName`、`source`——`generate` 动作使用的 SCL 模板）、`params`（参数键 → `{ block, member, min, max }` 全局 DB 成员绑定；`generate` 动作只使用 `min`/`max`），以及可选 `bootstrap` 块（`directory`、`projectName`、`deviceOrderNumber`、`deviceName`、`deviceVersion`）——当 `projectPath` 不存在时自动创建目录型工程并插入 PLC 设备。Openness 程序需要配套安装的 TIA Portal 与 run 动作所执行工程操作的许可证。
 
 ## 随附动作
 
@@ -56,5 +56,6 @@ OpennessBridge.exe --config bridge.json --find-device "1214C"  # catalog lookup 
 
 - `action: compile`（默认）——编译 PLC 并上报错误/警告数量。该动作的演示 spec 断言 `compileErrors lte 0` 并最小化 `compileErrors`。
 - `action: online`——把软件下载到 S7-PLCSIM 目标、上线，并通过 V21 的动态 `OnlineValue` 属性读回每个绑定成员的当前值。它上报 `{ downloadState, downloadMessages, onlineValues, readMs, downloadMs }`，把下载/在线读取失败映射为带清晰 `error` 的 `diverged` 状态。V21 没有 `SetInterfaceToPlcsim()` 辅助方法：目标通过连接配置的 `PLCSIM` PC 接口（默认编号 1）解析，如 Openness 手册所述；`simulation` 覆盖这些名称。下载回调处理标准的停止 / 一致性 / 全块 / 目标 / 重初始化与启动模块选择，并对任何未处理的配置失败关闭。
+- `action: generate`——渲染 `generate.source`（SCL 文本，其中的 `{{param}}` 占位符被替换为该参数的数值候选值，不变文化格式），导入/替换命名块，然后编译并上报编译字段加 `blockName`。模板走 V21 的外部源路线（`ExternalSourceGroup.ExternalSources.CreateFromFile` 再 `GenerateBlocksFromSource`），接受纯 SCL 文本、无需 Openness XML 包装，并覆盖同名既有块；渲染后的文本写入按 run 命名的临时文件并在导入后删除。未知占位符与导入/编译失败映射为 `diverged`。该动作的 `params` 映射只提供数值 `min`/`max` 域（无需 `block`/`member`）。
 
 需要不同动作（工艺对象扫描、导出设置）的部署方扩展 C# 宿主；适配器与协议保持不变。
