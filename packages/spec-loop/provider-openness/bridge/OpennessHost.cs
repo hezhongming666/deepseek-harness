@@ -589,6 +589,7 @@ namespace OpennessBridge
             var compileMs = stopwatch.ElapsedMilliseconds;
             var errors = compileResult.ErrorCount;
             var warnings = compileResult.WarningCount;
+            var messages = FlattenCompilerMessages(compileResult);
             if (compileResult.State != CompilerResultState.Success)
             {
                 return (
@@ -596,7 +597,8 @@ namespace OpennessBridge
                     {
                         RunId = runId,
                         Status = "diverged",
-                        Error = $"compile ended in state {compileResult.State} with {errors} error(s)",
+                        Error = $"compile ended in state {compileResult.State} with {errors} error(s): "
+                            + string.Join(" | ", messages),
                     },
                     null,
                     0);
@@ -606,8 +608,31 @@ namespace OpennessBridge
                 ["compileErrors"] = JsonDocument.Parse(errors.ToString(CultureInfo.InvariantCulture)).RootElement.Clone(),
                 ["compileWarnings"] = JsonDocument.Parse(warnings.ToString(CultureInfo.InvariantCulture)).RootElement.Clone(),
                 ["compileMs"] = JsonDocument.Parse(compileMs.ToString(CultureInfo.InvariantCulture)).RootElement.Clone(),
+                ["compileMessages"] = JsonSerializer.SerializeToElement(messages),
             };
             return (null, result, compileMs);
+        }
+
+        /// <summary>Flatten the compiler result's nested messages into strings.</summary>
+        private static List<string> FlattenCompilerMessages(CompilerResult result)
+        {
+            var messages = new List<string>();
+            foreach (var message in result.Messages)
+            {
+                CollectCompilerMessages(message, messages);
+            }
+            return messages;
+        }
+
+        private static void CollectCompilerMessages(CompilerResultMessage message, List<string> messages)
+        {
+            messages.Add(string.IsNullOrEmpty(message.Path)
+                ? message.Description
+                : $"{message.Path}: {message.Description}");
+            foreach (var child in message.Messages)
+            {
+                CollectCompilerMessages(child, messages);
+            }
         }
 
         /// <summary>

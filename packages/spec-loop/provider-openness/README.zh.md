@@ -7,14 +7,14 @@
 | 组成 | 角色 |
 |---|---|
 | `OpennessSpecLoopAdapter` | `specLoopAdapter` provider：经 HTTP JSON 实现 `validate`（S1 关卡）与 `run`（带取消的执行） |
-| [bridge/](bridge/README.md) | Windows 宿主进程：保持一个 TIA Portal V21 工程打开、在 127.0.0.1 上服务协议，并实现随附的 `compile` 与 `online`（下载 + 读回）动作（另含确定性的 `--fake` 模式） |
+| [bridge/](bridge/README.md) | Windows 宿主进程：保持一个 TIA Portal V21 工程打开、在 127.0.0.1 上服务协议，并实现随附的 `compile`、`online`（下载 + 读回）与 `generate`（SCL 模板生成块）动作（另含确定性的 `--fake` 模式） |
 | `src/wire.ts` | 对桥的每个响应做敌意输入校验（桥是外部进程） |
 
 ## 线协议
 
 桥使用纯 HTTP JSON。`GET /health` 报告就绪状态与环境四元组；`POST /validate` 接收 `{ params }` 并返回 `{ ok, reasons }`；`POST /run` 接收 `{ runId, params }` 并返回 `{ runId, status: success|diverged|infrastructure|killed, result?, licenseMs?, error?, environment? }`；`POST /cancel` 接收 `{ runId }` 且尽力而为——进行中的 Openness 调用无法被抢占。宿主不可用表现为 HTTP 503；已有 run 在飞时下一个 run 得到 409。
 
-随附动作的参数域由部署方定义：桥配置把每个参数键映射到一个全局数据块成员（`{ block, member, min, max }`），run 把候选的数值写入这些成员的起始值（V21 的动态 `StartValue` 属性）后执行所配置的动作。`compile` 动作（默认）编译 PLC，结果携带 `{ compileErrors, compileWarnings, compileMs }`；`online` 动作把软件下载到 S7-PLCSIM 仿真目标、上线，结果携带 `{ downloadState, downloadMessages, onlineValues, readMs, downloadMs }`。测量的墙钟时长作为 `licenseMs` 上报。
+随附动作的参数域由部署方定义：桥配置把每个参数键映射到一个全局数据块成员（`{ block, member, min, max }`），run 把候选的数值写入这些成员的起始值（V21 的动态 `StartValue` 属性）后执行所配置的动作。`compile` 动作（默认）编译 PLC，结果携带 `{ compileErrors, compileWarnings, compileMessages, compileMs }`；`online` 动作把软件下载到 S7-PLCSIM 仿真目标、上线，结果携带 `{ downloadState, downloadMessages, onlineValues, readMs, downloadMs }`；`generate` 动作把候选值渲染进配置的 SCL 模板、导入块，结果携带编译字段加 `blockName`（其 `params` 映射只提供数值域）。测量的墙钟时长作为 `licenseMs` 上报。
 
 ## 配置
 
@@ -48,6 +48,6 @@ import type { Config } from '@deepseek-ai/dsh-provider-openness'
 ## Known Limitations and Deferred Work
 
 - **无遥测流提前终止**——桥只在 Openness 调用结束时上报结果；发散从最终编译结果判定，而非增量求解器遥测。
-- **真实 Openness 宿主编译已验证、compile 动作运行期已真机验证**——仓库构建可在任何机器上编译协议层与假宿主，绑定 TIA 的宿主已在 TIA 机器上针对安装的 V21 API 编译通过（V21 的软件/编译/数据块成员面已在仓库内对齐）；持 STEP 7 Professional 试用许可的 TIA Portal V21 真机验证了 compile 动作的完整运行链路——无头打开、全局数据块成员起始值写入、编译，以及带密钥的 `spec_loop` 以 `satisfied` 收尾（见[桥 README](bridge/README.md)）。`online` 动作的下载与读回路径已针对 V21 编译验证；其运行期验证待 TIA 机器安装 S7-PLCSIM 后进行。
+- **真实 Openness 宿主编译已验证、compile 与 generate 动作运行期已真机验证**——仓库构建可在任何机器上编译协议层与假宿主，绑定 TIA 的宿主已在 TIA 机器上针对安装的 V21 API 编译通过（V21 的软件/编译/数据块成员面已在仓库内对齐）；持 STEP 7 Professional 试用许可的 TIA Portal V21 真机验证了 compile 动作的完整运行链路——无头打开、全局数据块成员起始值写入、编译，以及带密钥的 `spec_loop` 以 `satisfied` 收尾——也验证了 generate 动作链路——SCL 模板渲染、经外部源码路径导入块、携带消息反馈的编译，以及一次带密钥的 `spec_loop` 从刻意的除零发散中恢复到 `satisfied`（见[桥 README](bridge/README.md)）。`online` 动作的下载与读回路径已针对 V21 编译验证；其运行期验证待 TIA 机器安装 S7-PLCSIM 后进行。
 - **取消无法抢占 Openness**——`/cancel` 在进行中的调用结束后丢弃其结果；截至彼时的许可证时长仍被消耗。
 - **许可证记账为编译墙钟时长**——桥把编译的墙钟跨度上报为 `licenseMs`；真正的许可证池台账仍属部署方。

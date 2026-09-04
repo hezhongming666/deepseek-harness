@@ -8,7 +8,7 @@
 
 - `GET /health`——就绪状态与环境四元组（`softwareVersion`、`osKernel`）。
 - `POST /validate`——廉价的 S1 关卡：按配置检查参数键与闭区间数值边界；不编译、不写工程。
-- `POST /run`——随附动作。`action: compile`（默认）把每个参数写入其绑定的全局数据块成员的起始值，编译 PLC，上报 `{ compileErrors, compileWarnings, compileMs }`。`action: online` 写入相同的起始值，把软件下载到仿真目标、上线，上报 `{ downloadState, downloadMessages, onlineValues, readMs, downloadMs }`。`action: generate` 渲染配置里的 SCL 模板（把每个 `{{param}}` 占位符替换为候选的数值）、导入/替换命名块、编译，并上报编译字段加 `blockName`。测量的墙钟时长同时作为 `licenseMs`（桥能测量的耗许可跨度）上报。
+- `POST /run`——随附动作。`action: compile`（默认）把每个参数写入其绑定的全局数据块成员的起始值，编译 PLC，上报 `{ compileErrors, compileWarnings, compileMessages, compileMs }`。`action: online` 写入相同的起始值，把软件下载到仿真目标、上线，上报 `{ downloadState, downloadMessages, onlineValues, readMs, downloadMs }`。`action: generate` 渲染配置里的 SCL 模板（把每个 `{{param}}` 占位符替换为候选的数值）、导入/替换命名块、编译，并上报编译字段加 `blockName`。测量的墙钟时长同时作为 `licenseMs`（桥能测量的耗许可跨度）上报。
 - `POST /cancel`——尽力而为：进行中的 Openness 调用无法被抢占，桥在被取消的 run 结束时丢弃其结果。
 
 run 串行执行（在飞时返回 HTTP 409）；宿主不可用表现为 HTTP 503，适配器将其归类为 S3。
