@@ -50,15 +50,52 @@ namespace OpennessBridge
         /// <summary>
         /// Hook the assembly resolver once: TIA's Siemens.Engineering.*
         /// assemblies live in the TIA install directory (Copy Local must stay
-        /// false), so the resolver supplies them from the registry-derived
-        /// PublicAPI path when the CLR probes for them.
+        /// false), so the resolver supplies them when the CLR probes. The TIA
+        /// root is derived from the registry's Openness PublicAPI record —
+        /// the resolver's own registry derivation assumes the standard layout
+        /// and mis-resolves custom install drives.
         /// </summary>
         private static void EnsureResolver()
         {
             if (resolverHandle != null) return;
             lock (resolverGate)
             {
-                resolverHandle ??= Api.Global.Openness().Initialize(null, null, null, 21);
+                if (resolverHandle != null) return;
+                DirectoryInfo? tiaRoot = null;
+                string? apiDir = null;
+                var basePath = Microsoft.Win32.Registry.GetValue(
+                    @"HKEY_LOCAL_MACHINE\SOFTWARE\Siemens\Automation\Openness\21.0\PublicAPI\21.0.0.0\net48",
+                    "Siemens.Engineering.Base",
+                    null) as string;
+                if (!string.IsNullOrEmpty(basePath) && File.Exists(basePath))
+                {
+                    apiDir = Path.GetDirectoryName(basePath);
+                    if (apiDir != null)
+                    {
+                        // apiDir is <TIA>\PublicAPI\V21\net48; three levels up names the TIA root.
+                        tiaRoot = new DirectoryInfo(Path.GetFullPath(Path.Combine(apiDir, "..", "..", "..")));
+                    }
+                }
+                if (apiDir != null)
+                {
+                    // The official resolver does not reliably cover the split
+                    // Siemens.Engineering.* assemblies on custom installs, so
+                    // this fallback loads them straight from the recorded
+                    // PublicAPI directory.
+                    AppDomain.CurrentDomain.AssemblyResolve += (_, args) =>
+                    {
+                        var name = new System.Reflection.AssemblyName(args.Name).Name;
+                        if (name == null || !name.StartsWith("Siemens.Engineering", StringComparison.Ordinal))
+                        {
+                            return null;
+                        }
+                        var candidate = Path.Combine(apiDir, name + ".dll");
+                        return File.Exists(candidate)
+                            ? System.Reflection.Assembly.LoadFrom(candidate)
+                            : null;
+                    };
+                }
+                resolverHandle ??= Api.Global.Openness().Initialize(tiaRoot, null, null, 21);
             }
         }
 
