@@ -1,8 +1,8 @@
 # Optional spec-loop patch over the shipped Web composition. Mounts the TIA
 # Portal Openness adapter and the model-facing spec_loop tool; the bridge URL
 # names a running Openness bridge (see packages/spec-loop/provider-openness).
-# The models chain drives candidate generation through the shipped DeepSeek
-# provider; any generation a spec_loop run needs resolves through it.
+# The models list is the ordered generation fallback chain: flash proposes
+# first (cheap and adequate for numeric candidates), pro runs only if it fails.
 
 - insert:
     - id: provider-openness
@@ -16,3 +16,5 @@
         models:
           - provider: deepseek-official
             model: deepseek-v4-flash
+          - provider: deepseek-official
+            model: deepseek-v4-pro
