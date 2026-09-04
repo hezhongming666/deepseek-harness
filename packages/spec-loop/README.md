@@ -7,6 +7,7 @@ This family runs bounded, replayable parameter-search loops — spec contract, n
 | Package | Role | ctx key |
 |---|---|---|
 | [`spec-loop/`](spec-loop/README.md) | Defines the loop engine, spec validation, and the software adapter seam | `ctx.specLoopAdapter` |
+| [`provider-openness/`](provider-openness/README.md) | Ships the TIA Portal Openness adapter provider, the HTTP JSON bridge protocol, and the bundled C# bridge | provides `ctx.specLoopAdapter` |
 | [`tool-spec-loop/`](tool-spec-loop/README.md) | Exposes the deterministic loop to the model with multi-model generation fallback | registers on `ctx.tools` |
 
 The engine holds no state between runs: all bookkeeping is a pure function of the generation and adapter outcome sequence, so a replay is a run whose generator feeds logged proposals back.

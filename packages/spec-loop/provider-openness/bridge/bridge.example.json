@@ -1,0 +1,11 @@
+{
+  "port": 0,
+  "fake": false,
+  "projectPath": "C:\\Projects\\Demo\\Demo.ap21",
+  "mode": "WithoutUserInterface",
+  "device": "",
+  "params": {
+    "coolingTimeMs": { "tag": "Diag.coolingTimeMs", "min": 0, "max": 60000 },
+    "threshold": { "tag": "Diag.threshold", "min": 0, "max": 100 }
+  }
+}

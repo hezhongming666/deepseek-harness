@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>OpennessBridge</AssemblyName>
+    <RootNamespace>OpennessBridge</RootNamespace>
+    <!--
+      The default build compiles the protocol server and the deterministic
+      fake host only, so the wire layer is CI-verifiable without a TIA Portal
+      installation. A deployment with TIA Portal V21 builds the real Openness
+      host with:
+        dotnet build -p:WithOpenness=true -p:OpennessApiDir="C:\Program Files\Siemens\Automation\Portal V21\PublicAPI\V21\net48"
+      TIA V21 splits the Openness API into per-domain assemblies; the real
+      host uses the Base (project/session) and Step7 (PLC software/compile)
+      halves.
+    -->
+    <WithOpenness Condition="'$(WithOpenness)' == ''">false</WithOpenness>
+    <DefineConstants Condition="'$(WithOpenness)' == 'true'">$(DefineConstants);WITH_OPENNESS</DefineConstants>
+    <OpennessApiDir Condition="'$(OpennessApiDir)' == ''">C:\Program Files\Siemens\Automation\Portal V21\PublicAPI\V21\net48</OpennessApiDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(WithOpenness)' == 'true'">
+    <PackageReference Include="Siemens.Collaboration.Net" Version="3.0.1725521661" />
+    <PackageReference Include="Siemens.Collaboration.Net.CoreExtensions" Version="3.0.1725521661" />
+    <PackageReference Include="Siemens.Collaboration.Net.Logging" Version="3.0.1725521661" />
+    <PackageReference Include="Siemens.Collaboration.Net.TiaPortal.Openness.Resolver" Version="2.0.1765367256" />
+    <Reference Include="Siemens.Engineering.Base">
+      <HintPath>$(OpennessApiDir)\Siemens.Engineering.Base.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Siemens.Engineering.Step7">
+      <HintPath>$(OpennessApiDir)\Siemens.Engineering.Step7.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

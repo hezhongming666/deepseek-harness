@@ -552,9 +552,9 @@ const SERVICE_ROLES: ServiceRole[] = [
     pkg: 'spec-loop',
     title: 'Spec-loop software adapter seam',
     mode: 'seam',
-    implementations: [],
+    implementations: ['provider-openness'],
     consumers: ['tool-spec-loop'],
-    note: 'One deployment-owned adapter per context; industrial-software integrations implement validate (the cheap S1 gate) and run (execution with structured outcomes), and the deterministic spec-loop engine classifies each iteration.',
+    note: 'One adapter per context; the shipped TIA Portal Openness provider (provider-openness) drives an Openness bridge over HTTP JSON, and other integrations stay deployment-owned. Implementations provide validate (the cheap S1 gate) and run (execution with structured outcomes), and the deterministic spec-loop engine classifies each iteration.',
   },
   {
     key: 'lsp',

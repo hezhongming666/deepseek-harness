@@ -1,0 +1,18 @@
+# Optional spec-loop patch over the shipped Web composition. Mounts the TIA
+# Portal Openness adapter and the model-facing spec_loop tool; the bridge URL
+# names a running Openness bridge (see packages/spec-loop/provider-openness).
+# The models chain drives candidate generation through the shipped DeepSeek
+# provider; any generation a spec_loop run needs resolves through it.
+
+- insert:
+    - id: provider-openness
+      name: '@deepseek-ai/dsh-provider-openness'
+      config:
+        url: !!js "process.env.OPENNESS_BRIDGE_URL ?? 'http://127.0.0.1:4279'"
+
+    - id: tool-spec-loop
+      name: '@deepseek-ai/dsh-tool-spec-loop'
+      config:
+        models:
+          - provider: deepseek-official
+            model: deepseek-v4-flash

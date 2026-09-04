@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write docs/subsystems/spec-loop.md
-spec-loop.md: bfc2f389569110d92fd3ee9b770fd0b1a0460837
-spec-loop.zh.md: 2c6a619eaef4eaa560150670e760be6489db6bad
+spec-loop.md: 38783bb464b9b477e2a6052b0c92cc731c97c9e0
+spec-loop.zh.md: 3a7ced8a5eb916da5ad9fb83bf3e0ffb5e469aa6

@@ -46,6 +46,7 @@ const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
   'packages/attachment/attachment-local': { kind: 'indirect', reason: 'The local backend delegates model request rendering to provider adapters.' },
   'packages/shell/shell': { kind: 'indirect', reason: 'The service interface delegates all model rendering to dsh-tool-bash.' },
   'packages/spec-loop/spec-loop': { kind: 'indirect', reason: 'The loop engine and adapter seam delegate all model rendering to dsh-tool-spec-loop.' },
+  'packages/spec-loop/provider-openness': { kind: 'indirect', reason: 'The Openness bridge adapter feeds only per-iteration outcomes to the engine; dsh-tool-spec-loop owns all model rendering.' },
   'packages/vision/vision': { kind: 'indirect', reason: 'The provider registry and selection seam delegate all model rendering to dsh-tool-vision.' },
   'packages/vision/vision-openai': { kind: 'indirect', reason: 'The provider backend delegates model rendering to dsh-tool-vision.' },
   'packages/shell/shell-env': { kind: 'indirect', reason: 'The env service exposes managed DSH_* facts through the shell tools (dsh-tool-bash/dsh-tool-pwsh); it registers no prompt or schema of its own.' },

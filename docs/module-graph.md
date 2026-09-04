@@ -296,6 +296,7 @@ flowchart TD
     pkg_tool_pwsh_persistent["tool-pwsh-persistent"]
   end
   subgraph group_spec_loop["packages/spec-loop"]
+    pkg_provider_openness["provider-openness"]
     pkg_spec_loop["spec-loop"]
     pkg_tool_spec_loop["tool-spec-loop"]
   end
@@ -496,6 +497,8 @@ flowchart TD
   pkg_session_persistence --> pkg_timeout
   pkg_session_projection --> pkg_invariants
   pkg_session_projection --> pkg_session
+  pkg_provider_openness --> pkg_invariants
+  pkg_provider_openness --> pkg_spec_loop
   pkg_acp_snapshot --> pkg_invariants
   pkg_acp_snapshot --> pkg_session
   pkg_vision_openai --> pkg_invariants
@@ -1550,6 +1553,7 @@ flowchart TD
 | [`sandbox`](../packages/sandbox/sandbox) | `sandbox` | [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session) |
 | [`session-persistence`](../packages/session/session-persistence) | `session` | [`brand`](../packages/util/brand), [`invariants`](../packages/runtime-diagnostics/invariants), [`session`](../packages/core/session), [`timeout`](../packages/util/timeout) |
 | [`session-projection`](../packages/session/session-projection) | `session` | [`invariants`](../packages/runtime-diagnostics/invariants), [`session`](../packages/core/session) |
+| [`provider-openness`](../packages/spec-loop/provider-openness) | `spec-loop` | [`invariants`](../packages/runtime-diagnostics/invariants), [`spec-loop`](../packages/spec-loop/spec-loop) |
 | [`acp-snapshot`](../packages/test-support/acp-snapshot) | `test-support` | [`invariants`](../packages/runtime-diagnostics/invariants), [`session`](../packages/core/session) |
 | [`vision-openai`](../packages/vision/vision-openai) | `vision` | [`invariants`](../packages/runtime-diagnostics/invariants), [`timeout`](../packages/util/timeout), [`vision`](../packages/vision/vision) |
 | [`llm-retry`](../packages/llm/llm-retry) | `llm` | [`agent`](../packages/core/agent), [`brand`](../packages/util/brand), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`timeout`](../packages/util/timeout) |

@@ -1,0 +1,50 @@
+# OpennessBridge — TIA Portal Openness HTTP JSON 桥
+
+[English](README.md) | 中文
+
+`@deepseek-ai/dsh-provider-openness` 背后的桥进程：一个 Windows 宿主，保持一个 TIA Portal V21 工程打开，并在 127.0.0.1 上服务[适配器的 HTTP JSON 协议](../README.md#the-wire-protocol)。适配器可以连接一个已运行的桥（`url` 模式），也可以在 `spawn` 模式下拥有一个。
+
+## 功能
+
+- `GET /health`——就绪状态与环境四元组（`softwareVersion`、`osKernel`）。
+- `POST /validate`——廉价的 S1 关卡：按配置检查参数键与闭区间数值边界；不编译、不写工程。
+- `POST /run`——随附动作：把每个参数写入其绑定变量的起始值，编译 PLC，上报 `{ compileErrors, compileWarnings, compileMs }`。编译墙钟时长同时作为 `licenseMs`（桥能测量的耗许可跨度）上报。
+- `POST /cancel`——尽力而为：进行中的 Openness 调用无法被抢占，桥在被取消的 run 结束时丢弃其结果。
+
+run 串行执行（在飞时返回 HTTP 409）；宿主不可用表现为 HTTP 503，适配器将其归类为 S3。
+
+## 真实宿主的前置条件
+
+- 运行桥的 Windows 用户必须是本地组 **`Siemens TIA Openness`** 的成员（`net localgroup "Siemens TIA Openness" <用户> /add`）。组关系只有通过新登录才能进入进程令牌：加组后请注销重新登录，再启动桥。
+- 桥在运行期通过官方 `Siemens.Collaboration.Net.TiaPortal.Openness.Resolver` 包从已安装的 TIA Portal 解析 `Siemens.Engineering.*`；Openness 程序集保持 Copy Local 关闭（TIA 自身的加载器拒绝本地副本）。
+- 需安装 TIA Portal V21 及其 Openness 组件，并持有覆盖 run 动作所执行工程操作的许可证。
+
+## 构建
+
+TIA Portal Openness 是仅 Windows 的进程内 .NET API。桥有两个构建档：
+
+```sh
+# Protocol layer + deterministic fake host — no TIA Portal needed. This is
+# what the repo gates can build anywhere.
+dotnet build OpennessBridge.csproj -c Release
+
+# Full build against the installed TIA Portal V21 Openness API. TIA V21 ships
+# the API as split per-domain assemblies under the net48 folder.
+dotnet build OpennessBridge.csproj -c Release -p:WithOpenness=true ^
+  -p:OpennessApiDir="C:\Program Files\Siemens\Automation\Portal V21\PublicAPI\V21\net48"
+```
+
+默认 `OpennessApiDir` 与 V21 标准安装布局一致；按机器调整即可。Openness 宿主（`OpennessHost.cs`）只在完整构建中编译；其 API 用法已针对真实 V21 参考程序集编译通过，运行期的写入与编译路径在部署机上用工程副本冒烟验证。
+
+## 运行
+
+```sh
+OpennessBridge.exe --config bridge.example.json          # real host, needs TIA + a project
+OpennessBridge.exe --fake --config bridge.example.json   # deterministic fake, any Windows machine
+```
+
+启动时桥在 stdout 打印恰好一行——`{"event":"listening","url":"http://127.0.0.1:<port>"}`——适配器的 spawn 模式等待这一行。配置字段：`port`（0 表示自动发现空闲端口）、`projectPath`、`mode`（`WithoutUserInterface` | `WithUserInterface`）、`device`（空表示选择第一个带 PLC 软件的设备）、`params`（参数键 → `{ tag, min, max }` 变量绑定）、`openTimeoutSeconds`。Openness 程序需要配套安装的 TIA Portal 与对应工程的许可证。
+
+## 随附动作
+
+参数域由部署方通过配置的 `params` 映射定义：每个参数键绑定一个 PLC 变量路径，run 把候选的数值写入这些变量的起始值后编译。该动作的演示 spec 断言 `compileErrors lte 0` 并最小化 `compileErrors`。需要不同动作（工艺对象扫描、导出设置）的部署方扩展 C# 宿主；适配器与协议保持不变。

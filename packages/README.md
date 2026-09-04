@@ -33,7 +33,7 @@ Groups hold `packages/<group>/<pkg>/`; names stay `@deepseek-ai/dsh-<pkg>`. **Gr
 | [`jobs/`](jobs/README.md) | Generic background-job runtime and model-facing `job_*` control tools | Product — stable API |
 | [`experimental/`](experimental/README.md) | Private prototypes and internal-only plugins | Unreleased |
 | [`workflow/`](workflow/README.md) | Workflow seam, worker-thread engine, and model-facing `workflow`/`ralph` tools | Product — stable API |
-| [`spec-loop/`](spec-loop/README.md) | Deterministic spec-loop engine, software adapter seam, and model-facing `spec_loop` tool | Product — stable API |
+| [`spec-loop/`](spec-loop/README.md) | Deterministic spec-loop engine, software adapter seam, shipped TIA Portal Openness provider + bridge, and model-facing `spec_loop` tool | Product — stable API |
 | [`web/`](web/README.md) | Web capability family: seam, search/fetch provider impls, and the model-facing web tools | Product — stable API |
 | [`vision/`](vision/README.md) | Image-understanding capability family: seam, OpenAI-compatible provider, and the model-facing `understand_image` tool | Product — stable API |
 | [`attachment/`](attachment/README.md) | Durable attachment identity, validation, local content-addressed storage | Product — stable API |

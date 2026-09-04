@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-02-spec-loop-capability.md
-2026-09-02-spec-loop-capability.md: 2a6101f2204541d7a0b9cb92428a81c6e54697eb
-2026-09-02-spec-loop-capability.zh.md: 411772e93bbc2bb67f1d3df9a33774a15cfb83e0
+2026-09-02-spec-loop-capability.md: e5380f6b67323b8689addf5d708c6bc148edec0e
+2026-09-02-spec-loop-capability.zh.md: 68c5e4a4dfa4198cb2c568b921f8e7d6679762f2

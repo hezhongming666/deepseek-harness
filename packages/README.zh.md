@@ -33,7 +33,7 @@ npm scope 为 `@deepseek-ai/dsh-*`；Cordis `Service` 子类和函数插件通�
 | [`jobs/`](jobs/README.md) | 通用后台任务运行时和面向模型的 `job_*` 控制工具 | 产品：稳定 API |
 | [`experimental/`](experimental/README.md) | 私有原型与内部专用插件 | 不发布 |
 | [`workflow/`](workflow/README.md) | 工作流 seam、worker 线程引擎和面向模型的 `workflow`/`ralph` 工具 | 产品：稳定 API |
-| [`spec-loop/`](spec-loop/README.md) | 确定性 spec-loop 引擎、软件适配器 seam 和面向模型的 `spec_loop` 工具 | 产品：稳定 API |
+| [`spec-loop/`](spec-loop/README.md) | 确定性 spec-loop 引擎、软件适配器 seam、随附的 TIA Portal Openness provider 与桥，以及面向模型的 `spec_loop` 工具 | 产品：稳定 API |
 | [`web/`](web/README.md) | Web 能力系列：seam、搜索／获取提供方实现和面向模型的 Web 工具 | 产品：稳定 API |
 | [`vision/`](vision/README.md) | 图像理解能力系列：seam、OpenAI 兼容提供方和面向模型的 `understand_image` 工具 | 产品：稳定 API |
 | [`attachment/`](attachment/README.md) | 持久附件标识、校验、本地内容寻址存储 | 产品：稳定 API |

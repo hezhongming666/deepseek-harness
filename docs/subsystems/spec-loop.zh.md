@@ -4,7 +4,7 @@
 
 spec-loop 能力在外部工程软件之上运行有界、可回放的参数搜索闭环：spec 契约给出目标与数值断言，确定性引擎对候选参数执行校验、执行、分级与单调修复，而软件集成只需实现下文这个小巧的适配器 seam。与 [workflow](workflow.md) 一样，它是**一项可选能力**，不属于 agent loop，因此其类型与操作记录在此处，而非 [core.md](core.md)。每个上下文只允许一个适配器提供 `ctx.specLoopAdapter`；没有命名提供方注册表（第二个适配器通过插件配置替换第一个，而不与它同时运行）。
 
-Service Definition：[dsh-spec-loop](../../packages/spec-loop/spec-loop)（`ctx.specLoopAdapter`、引擎 `runSpecLoop`、spec 校验与下文词汇）。面向模型的 Consumer 是 [dsh-tool-spec-loop](../../packages/spec-loop/tool-spec-loop)，它注册 `spec_loop` 工具，并通过 LLM seam 的多模型回退链负责候选生成。适配器提供方由部署方自行实现；本包不随附任何实现。
+Service Definition：[dsh-spec-loop](../../packages/spec-loop/spec-loop)（`ctx.specLoopAdapter`、引擎 `runSpecLoop`、spec 校验与下文词汇）。面向模型的 Consumer 是 [dsh-tool-spec-loop](../../packages/spec-loop/tool-spec-loop)，它注册 `spec_loop` 工具，并通过 LLM seam 的多模型回退链负责候选生成。仓库内随附一个 provider：[dsh-provider-openness](../../packages/spec-loop/provider-openness) 经 HTTP JSON 桥适配 TIA Portal Openness（该包同时拥有随附的 C# 桥宿主）；其他集成由部署方自行实现。
 
 源码：seam 词汇位于 [`packages/spec-loop/spec-loop/src/types.ts`](../../packages/spec-loop/spec-loop/src/types.ts)，引擎位于 [`engine.ts`](../../packages/spec-loop/spec-loop/src/engine.ts)，spec 校验位于 [`spec.ts`](../../packages/spec-loop/spec-loop/src/spec.ts)。
 

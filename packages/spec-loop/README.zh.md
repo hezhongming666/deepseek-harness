@@ -7,6 +7,7 @@
 | 包 | 角色 | ctx 键 |
 |---|---|---|
 | [`spec-loop/`](spec-loop/README.md) | 定义闭环引擎、spec 校验与软件适配器 seam | `ctx.specLoopAdapter` |
+| [`provider-openness/`](provider-openness/README.md) | 随附 TIA Portal Openness 适配器 provider、HTTP JSON 桥协议与仓库内 C# 桥 | 提供 `ctx.specLoopAdapter` |
 | [`tool-spec-loop/`](tool-spec-loop/README.md) | 以多模型回退生成把确定性闭环暴露给模型 | 注册于 `ctx.tools` |
 
 引擎在运行之间不保留状态：全部记账都是生成与适配器结果序列的纯函数，因此回放就是让生成器回放已记录提案的一次运行。

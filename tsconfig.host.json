@@ -285,6 +285,7 @@
     { "path": "./packages/workflow/tool-workflow" },
     { "path": "./packages/workflow/tool-ralph" },
     { "path": "./packages/spec-loop/spec-loop" },
+    { "path": "./packages/spec-loop/provider-openness" },
     { "path": "./packages/spec-loop/tool-spec-loop" },
     { "path": "./packages/todo/tool-todo" },
     { "path": "./packages/plan/plan-mode" },
