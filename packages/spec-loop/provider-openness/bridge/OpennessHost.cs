@@ -100,6 +100,24 @@ namespace OpennessBridge
             }
         }
 
+        /// <summary>
+        /// Print one `device<TAB>itemType<TAB>itemName` line per device item.
+        /// This is the deployment diagnostic for choosing the config's
+        /// `device` value and locating the PLC software object.
+        /// </summary>
+        /// <param name="output">The sink receiving the listing.</param>
+        public void ListDevices(TextWriter output)
+        {
+            var opened = EnsureProject();
+            foreach (var device in opened.Devices)
+            {
+                foreach (var item in device.DeviceItems)
+                {
+                    output.WriteLine($"{device.Name}\t{item.GetType().FullName}\t{item.Name}");
+                }
+            }
+        }
+
         public Wire.ValidateResponse Validate(IReadOnlyDictionary<string, JsonElement> parameters)
         {
             EnsureSession();
@@ -277,12 +295,15 @@ namespace OpennessBridge
 
         private sealed class Session
         {
-            public Session(PlcSoftware software, string opennessVersion, Dictionary<string, string> environment)
+            public Session(Project project, PlcSoftware software, string opennessVersion, Dictionary<string, string> environment)
             {
+                Project = project;
                 Software = software;
                 OpennessVersion = opennessVersion;
                 Environment = environment;
             }
+
+            public Project Project { get; }
 
             public PlcSoftware Software { get; }
 
@@ -295,64 +316,62 @@ namespace OpennessBridge
         {
             lock (gate)
             {
-                if (plcSoftware != null)
+                var opened = EnsureProject();
+                plcSoftware ??= FindPlcSoftware(opened);
+                if (plcSoftware == null)
                 {
-                    return new Session(
-                        plcSoftware,
-                        portal?.GetType().Assembly.GetName().Version?.ToString() ?? "unknown",
-                        new Dictionary<string, string>
-                        {
-                            ["softwareVersion"] = $"TIA Portal Openness {portal?.GetType().Assembly.GetName().Version}",
-                            ["osKernel"] = Environment.OSVersion.VersionString,
-                        });
+                    throw new InfrastructureException(
+                        $"no PLC software found in project {JsonSerializer.Serialize(config.ProjectPath)}; "
+                        + "run --list-devices to see the device items");
                 }
-                try
-                {
-                    var mode = config.Mode == "WithUserInterface"
-                        ? TiaPortalMode.WithUserInterface
-                        : TiaPortalMode.WithoutUserInterface;
-                    var process = new TiaPortal(mode);
-                    var projectPath = new FileInfo(config.ProjectPath);
-                    if (!projectPath.Exists)
+                return new Session(
+                    opened,
+                    plcSoftware,
+                    portal?.GetType().Assembly.GetName().Version?.ToString() ?? "unknown",
+                    new Dictionary<string, string>
                     {
-                        process.Dispose();
-                        throw new InfrastructureException(
-                            $"project path {JsonSerializer.Serialize(config.ProjectPath)} does not exist");
-                    }
-                    var opened = process.Projects.Open(projectPath);
-                    var software = FindPlcSoftware(opened);
-                    if (software == null)
-                    {
-                        opened.Close();
-                        process.Dispose();
-                        throw new InfrastructureException(
-                            $"no PLC software found in project {JsonSerializer.Serialize(config.ProjectPath)}");
-                    }
-                    portal = process;
-                    project = opened;
-                    plcSoftware = software;
-                    var version = process.GetType().Assembly.GetName().Version?.ToString() ?? "unknown";
-                    return new Session(
-                        software,
-                        version,
-                        new Dictionary<string, string>
-                        {
-                            ["softwareVersion"] = $"TIA Portal Openness {version}",
-                            ["osKernel"] = Environment.OSVersion.VersionString,
-                        });
-                }
-                catch (InfrastructureException)
+                        ["softwareVersion"] = $"TIA Portal Openness {portal?.GetType().Assembly.GetName().Version}",
+                        ["osKernel"] = Environment.OSVersion.VersionString,
+                    });
+            }
+        }
+
+        /// <summary>Open the TIA session and the project once; PLC software is resolved separately.</summary>
+        private Project EnsureProject()
+        {
+            if (project != null)
+            {
+                return project;
+            }
+            try
+            {
+                var mode = config.Mode == "WithUserInterface"
+                    ? TiaPortalMode.WithUserInterface
+                    : TiaPortalMode.WithoutUserInterface;
+                var process = new TiaPortal(mode);
+                var projectPath = new FileInfo(config.ProjectPath);
+                if (!projectPath.Exists)
                 {
-                    throw;
+                    process.Dispose();
+                    throw new InfrastructureException(
+                        $"project path {JsonSerializer.Serialize(config.ProjectPath)} does not exist");
                 }
-                catch (Exception error)
-                {
-                    Dispose();
-                    // ToString keeps the full exception chain: Openness
-                    // failures are usually type-initializer errors whose
-                    // inner exception names the missing dependency.
-                    throw new InfrastructureException($"opening the TIA Portal project failed: {error}", error);
-                }
+                var opened = process.Projects.Open(projectPath);
+                portal = process;
+                project = opened;
+                return opened;
+            }
+            catch (InfrastructureException)
+            {
+                throw;
+            }
+            catch (Exception error)
+            {
+                Dispose();
+                // ToString keeps the full exception chain: Openness
+                // failures are usually type-initializer errors whose
+                // inner exception names the missing dependency.
+                throw new InfrastructureException($"opening the TIA Portal project failed: {error}", error);
             }
         }
 

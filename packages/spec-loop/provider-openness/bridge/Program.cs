@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading.Tasks;
 
@@ -14,11 +15,12 @@ namespace OpennessBridge
     {
         private const string HelpText =
             "OpennessBridge — TIA Portal Openness HTTP JSON bridge for dsh spec-loop\n"
-            + "usage: OpennessBridge [--config <path>] [--port <n>] [--fake] [--list-tags]\n"
+            + "usage: OpennessBridge [--config <path>] [--port <n>] [--fake] [--list-tags] [--list-devices]\n"
             + "  --config <path>  JSON config file (default bridge.json)\n"
             + "  --port <n>       listening port override (0 = discover a free port)\n"
             + "  --fake           serve the deterministic fake host without TIA Portal\n"
-            + "  --list-tags      print the project's PLC tags (table/tag, data type) and exit\n";
+            + "  --list-tags      print the project's PLC tags (table/tag, data type) and exit\n"
+            + "  --list-devices   print the project's devices and their items, and exit\n";
 
         private static async Task<int> Main(string[] args)
         {
@@ -43,17 +45,26 @@ namespace OpennessBridge
                 config.Port = options.Port.Value;
             }
             IOpennessHost host = CreateHost(config);
-            if (options.ListTags)
+            if (options.ListTags || options.ListDevices)
             {
-#if WITH_OPENNESS
-                if (host is OpennessHost opennessHost)
+                try
                 {
-                    opennessHost.ListTags(Console.Out);
-                    host.Dispose();
-                    return 0;
-                }
+#if WITH_OPENNESS
+                    if (host is OpennessHost opennessHost)
+                    {
+                        if (options.ListDevices) opennessHost.ListDevices(Console.Out);
+                        if (options.ListTags) opennessHost.ListTags(Console.Out);
+                        host.Dispose();
+                        return 0;
+                    }
 #endif
-                Console.Error.WriteLine("--list-tags requires the full Openness build (not --fake)");
+                }
+                catch (Exception error)
+                {
+                    Console.Error.WriteLine(Flatten(error));
+                    return 2;
+                }
+                Console.Error.WriteLine("--list-tags/--list-devices require the full Openness build (not --fake)");
                 return 2;
             }
             var shutdownRequested = new TaskCompletionSource<bool>();
@@ -98,12 +109,27 @@ namespace OpennessBridge
 #endif
         }
 
+        /// <summary>
+        /// Join the exception chain's messages without calling ToString: some
+        /// Openness exception types fail when ToString renders their internals.
+        /// </summary>
+        private static string Flatten(Exception error)
+        {
+            var parts = new List<string>();
+            for (var current = error as Exception; current != null; current = current.InnerException)
+            {
+                parts.Add($"{current.GetType().Name}: {current.Message}");
+            }
+            return string.Join(" <-- ", parts);
+        }
+
         private sealed class CliOptions
         {
             public bool ShowHelp { get; set; }
             public string ConfigPath { get; set; } = "bridge.json";
             public bool Fake { get; set; }
             public bool ListTags { get; set; }
+            public bool ListDevices { get; set; }
             public int? Port { get; set; }
         }
 
@@ -123,6 +149,9 @@ namespace OpennessBridge
                         break;
                     case "--list-tags":
                         options.ListTags = true;
+                        break;
+                    case "--list-devices":
+                        options.ListDevices = true;
                         break;
                     case "--config":
                         index += 1;

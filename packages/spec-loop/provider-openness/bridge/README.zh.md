@@ -41,9 +41,11 @@ dotnet build OpennessBridge.csproj -c Release -p:WithOpenness=true ^
 ```sh
 OpennessBridge.exe --config bridge.example.json          # real host, needs TIA + a project
 OpennessBridge.exe --fake --config bridge.example.json   # deterministic fake, any Windows machine
+OpennessBridge.exe --config bridge.json --list-devices   # print device items (pick the `device` value)
+OpennessBridge.exe --config bridge.json --list-tags      # print PLC tags (write the `params` map)
 ```
 
-启动时桥在 stdout 打印恰好一行——`{"event":"listening","url":"http://127.0.0.1:<port>"}`——适配器的 spawn 模式等待这一行。配置字段：`port`（0 表示自动发现空闲端口）、`projectPath`、`mode`（`WithoutUserInterface` | `WithUserInterface`）、`device`（空表示选择第一个带 PLC 软件的设备）、`params`（参数键 → `{ tag, min, max }` 变量绑定）、`openTimeoutSeconds`。Openness 程序需要配套安装的 TIA Portal 与对应工程的许可证。
+启动时桥在 stdout 打印恰好一行——`{"event":"listening","url":"http://127.0.0.1:<port>"}`——适配器的 spawn 模式等待这一行。配置字段：`port`（0 表示自动发现空闲端口）、`projectPath`、`mode`（`WithoutUserInterface` | `WithUserInterface`）、`device`（空表示选择第一个带 PLC 软件的设备）、`params`（参数键 → `{ tag, min, max }` 变量绑定）。Openness 程序需要配套安装的 TIA Portal 与 run 动作所执行工程操作的许可证。
 
 ## 随附动作
 

@@ -41,9 +41,11 @@ The default `OpennessApiDir` matches the standard V21 install layout; adjust it 
 ```sh
 OpennessBridge.exe --config bridge.example.json          # real host, needs TIA + a project
 OpennessBridge.exe --fake --config bridge.example.json   # deterministic fake, any Windows machine
+OpennessBridge.exe --config bridge.json --list-devices   # print device items (pick the `device` value)
+OpennessBridge.exe --config bridge.json --list-tags      # print PLC tags (write the `params` map)
 ```
 
-On startup the bridge prints exactly one stdout line — `{"event":"listening","url":"http://127.0.0.1:<port>"}` — which the adapter's spawn mode waits for. Config fields: `port` (0 discovers a free port), `projectPath`, `mode` (`WithoutUserInterface` | `WithUserInterface`), `device` (empty selects the first device with PLC software), `params` (parameter key → `{ tag, min, max }` tag bindings), `openTimeoutSeconds`. Openness programs need a matching TIA Portal installation and a license for the project it opens.
+On startup the bridge prints exactly one stdout line — `{"event":"listening","url":"http://127.0.0.1:<port>"}` — which the adapter's spawn mode waits for. Config fields: `port` (0 discovers a free port), `projectPath`, `mode` (`WithoutUserInterface` | `WithUserInterface`), `device` (empty selects the first device with PLC software), `params` (parameter key → `{ tag, min, max }` tag bindings). Openness programs need a matching TIA Portal installation and a license for the project operations the run action performs.
 
 ## Shipped action
 
