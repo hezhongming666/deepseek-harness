@@ -115,6 +115,7 @@ flowchart TD
   subgraph group_bundle["packages/bundle"]
     pkg_base["base"]
     pkg_headless["headless"]
+    pkg_ia["ia"]
     pkg_web_app["web-app"]
   end
   subgraph group_client["packages/client"]
@@ -222,6 +223,14 @@ flowchart TD
   end
   subgraph group_identity["packages/identity"]
     pkg_anonymous_user_id["anonymous-user-id"]
+  end
+  subgraph group_industrial["packages/industrial"]
+    pkg_ia_gates["ia-gates"]
+    pkg_ia_knowledge["ia-knowledge"]
+    pkg_ia_orchestrator["ia-orchestrator"]
+    pkg_ia_trace["ia-trace"]
+    pkg_ia_verifier["ia-verifier"]
+    pkg_tool_ia["tool-ia"]
   end
   subgraph group_interaction["packages/interaction"]
     pkg_commands["commands"]
@@ -353,6 +362,7 @@ flowchart TD
   pkg_scope --> pkg_invariants
   pkg_cmdline --> pkg_invariants
   pkg_base --> pkg_invariants
+  pkg_ia --> pkg_invariants
   pkg_client_ui_primitives --> pkg_invariants
   pkg_client_ui_slots --> pkg_invariants
   pkg_client_web --> pkg_invariants
@@ -364,6 +374,9 @@ flowchart TD
   pkg_host_directory_picker_browse --> pkg_invariants
   pkg_host_directory_picker_native --> pkg_invariants
   pkg_host_webserver --> pkg_invariants
+  pkg_ia_knowledge --> pkg_invariants
+  pkg_ia_trace --> pkg_invariants
+  pkg_ia_verifier --> pkg_invariants
   pkg_sandbox_windows_acl --> pkg_invariants
   pkg_storage --> pkg_invariants
   pkg_subprocess --> pkg_invariants
@@ -695,6 +708,9 @@ flowchart TD
   pkg_command_feedback --> pkg_invariants
   pkg_command_feedback --> pkg_session
   pkg_command_feedback --> pkg_session_telemetry
+  pkg_ia_gates --> pkg_agent
+  pkg_ia_gates --> pkg_invariants
+  pkg_ia_gates --> pkg_user_approval
   pkg_permission_presets --> pkg_commands
   pkg_permission_presets --> pkg_invariants
   pkg_permission_presets --> pkg_sandbox
@@ -891,6 +907,9 @@ flowchart TD
   pkg_tool_call_timeout_policy --> pkg_llm
   pkg_tool_call_timeout_policy --> pkg_timeout
   pkg_tool_call_timeout_policy --> pkg_tools
+  pkg_ia_orchestrator --> pkg_ia_gates
+  pkg_ia_orchestrator --> pkg_ia_verifier
+  pkg_ia_orchestrator --> pkg_invariants
   pkg_tool_ask_user --> pkg_agent
   pkg_tool_ask_user --> pkg_invariants
   pkg_tool_ask_user --> pkg_tools
@@ -1081,6 +1100,16 @@ flowchart TD
   pkg_host_apiproxy --> pkg_agent_presets
   pkg_host_apiproxy --> pkg_cordis_host_runner
   pkg_host_apiproxy --> pkg_invariants
+  pkg_tool_ia --> pkg_agent
+  pkg_tool_ia --> pkg_ia_gates
+  pkg_tool_ia --> pkg_ia_knowledge
+  pkg_tool_ia --> pkg_ia_orchestrator
+  pkg_tool_ia --> pkg_ia_trace
+  pkg_tool_ia --> pkg_ia_verifier
+  pkg_tool_ia --> pkg_invariants
+  pkg_tool_ia --> pkg_session
+  pkg_tool_ia --> pkg_system_prompt
+  pkg_tool_ia --> pkg_tools
   pkg_sdk_protocol --> pkg_invariants
   pkg_sdk_protocol --> pkg_llm
   pkg_sdk_protocol --> pkg_session
@@ -1496,6 +1525,7 @@ flowchart TD
 | [`scope`](../packages/core/scope) | `core` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`cmdline`](../packages/boot/cmdline) | `boot` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`base`](../packages/bundle/base) | `bundle` | [`invariants`](../packages/runtime-diagnostics/invariants) |
+| [`ia`](../packages/bundle/ia) | `bundle` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`client-ui-primitives`](../packages/client/ui-primitives) | `client` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`client-ui-slots`](../packages/client/ui-slots) | `client` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`client-web`](../packages/client/web) | `client` | [`invariants`](../packages/runtime-diagnostics/invariants) |
@@ -1507,6 +1537,9 @@ flowchart TD
 | [`host-directory-picker-browse`](../packages/host/directory-picker-browse) | `host` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`host-directory-picker-native`](../packages/host/directory-picker-native) | `host` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`host-webserver`](../packages/host/webserver) | `host` | [`invariants`](../packages/runtime-diagnostics/invariants) |
+| [`ia-knowledge`](../packages/industrial/ia-knowledge) | `industrial` | [`invariants`](../packages/runtime-diagnostics/invariants) |
+| [`ia-trace`](../packages/industrial/ia-trace) | `industrial` | [`invariants`](../packages/runtime-diagnostics/invariants) |
+| [`ia-verifier`](../packages/industrial/ia-verifier) | `industrial` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`sandbox-windows-acl`](../packages/sandbox/sandbox-windows-acl) | `sandbox` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`storage`](../packages/storage/storage) | `storage` | [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`subprocess`](../packages/subprocess/subprocess) | `subprocess` | [`invariants`](../packages/runtime-diagnostics/invariants) |
@@ -1597,6 +1630,7 @@ flowchart TD
 | [`tmux-context`](../packages/context/tmux-context) | `context` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`session`](../packages/core/session), [`shell`](../packages/shell/shell) |
 | [`fs-e2b`](../packages/e2b/fs-e2b) | `e2b` | [`e2b`](../packages/e2b/e2b), [`fs`](../packages/fs/fs), [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`command-feedback`](../packages/feedback/command-feedback) | `feedback` | [`anonymous-user-id`](../packages/identity/anonymous-user-id), [`commands`](../packages/interaction/commands), [`invariants`](../packages/runtime-diagnostics/invariants), [`session`](../packages/core/session), [`session-telemetry`](../packages/session/session-telemetry) |
+| [`ia-gates`](../packages/industrial/ia-gates) | `industrial` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`user-approval`](../packages/interaction/user-approval) |
 | [`permission-presets`](../packages/interaction/permission-presets) | `interaction` | [`commands`](../packages/interaction/commands), [`invariants`](../packages/runtime-diagnostics/invariants), [`sandbox`](../packages/sandbox/sandbox), [`sandbox-policy`](../packages/sandbox/sandbox-policy), [`session`](../packages/core/session), [`session-projection`](../packages/session/session-projection), [`settings`](../packages/settings/settings), [`shell`](../packages/shell/shell), [`user-approval`](../packages/interaction/user-approval) |
 | [`jobs-local`](../packages/jobs/jobs-local) | `jobs` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`jobs`](../packages/jobs/jobs), [`scope`](../packages/core/scope), [`timeout`](../packages/util/timeout) |
 | [`lsp-stdio`](../packages/lsp/lsp-stdio) | `lsp` | [`brand`](../packages/util/brand), [`fs`](../packages/fs/fs), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`lsp`](../packages/lsp/lsp), [`subprocess`](../packages/subprocess/subprocess), [`timeout`](../packages/util/timeout) |
@@ -1628,6 +1662,7 @@ flowchart TD
 | [`cordis-host-runner`](../packages/extensions/cordis-host-runner) | `extensions` | [`agent`](../packages/core/agent), [`brand`](../packages/util/brand), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`scope`](../packages/core/scope), [`session`](../packages/core/session), [`tools`](../packages/core/tools), [`typert-protocol`](../packages/typert/protocol) |
 | [`repeat-tool-reminder`](../packages/guard/repeat-tool-reminder) | `guard` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`tools`](../packages/core/tools) |
 | [`tool-call-timeout-policy`](../packages/guard/timeout-policy) | `guard` | [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools) |
+| [`ia-orchestrator`](../packages/industrial/ia-orchestrator) | `industrial` | [`ia-gates`](../packages/industrial/ia-gates), [`ia-verifier`](../packages/industrial/ia-verifier), [`invariants`](../packages/runtime-diagnostics/invariants) |
 | [`tool-ask-user`](../packages/interaction/tool-ask-user) | `interaction` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`tools`](../packages/core/tools), [`user-questions`](../packages/interaction/user-questions) |
 | [`tool-jobs`](../packages/jobs/tool-jobs) | `jobs` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`jobs`](../packages/jobs/jobs), [`llm`](../packages/llm/llm), [`output-retention`](../packages/util/output-retention), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`tool-lsp`](../packages/lsp/tool-lsp) | `lsp` | [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`lsp`](../packages/lsp/lsp), [`system-prompt`](../packages/core/system-prompt), [`timeout`](../packages/util/timeout), [`tools`](../packages/core/tools) |
@@ -1661,6 +1696,7 @@ flowchart TD
 | [`experimental-agent-team`](../packages/experimental/agent-team) | `experimental` | [`agent`](../packages/core/agent), [`brand`](../packages/util/brand), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`session-persistence`](../packages/session/session-persistence), [`subagent`](../packages/subagent/subagent) |
 | [`tool-cordis`](../packages/extensions/tool-cordis) | `extensions` | [`agent`](../packages/core/agent), [`cordis-host-runner`](../packages/extensions/cordis-host-runner), [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`scope`](../packages/core/scope), [`session`](../packages/core/session), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`host-apiproxy`](../packages/host/apiproxy) | `host` | [`agent-presets`](../packages/preset/agent-presets), [`cordis-host-runner`](../packages/extensions/cordis-host-runner), [`invariants`](../packages/runtime-diagnostics/invariants) |
+| [`tool-ia`](../packages/industrial/tool-ia) | `industrial` | [`agent`](../packages/core/agent), [`ia-gates`](../packages/industrial/ia-gates), [`ia-knowledge`](../packages/industrial/ia-knowledge), [`ia-orchestrator`](../packages/industrial/ia-orchestrator), [`ia-trace`](../packages/industrial/ia-trace), [`ia-verifier`](../packages/industrial/ia-verifier), [`invariants`](../packages/runtime-diagnostics/invariants), [`session`](../packages/core/session), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools) |
 | [`sdk-protocol`](../packages/sdk/protocol) | `sdk` | [`invariants`](../packages/runtime-diagnostics/invariants), [`llm`](../packages/llm/llm), [`session`](../packages/core/session), [`subagent`](../packages/subagent/subagent) |
 | [`tool-bash`](../packages/shell/tool-bash) | `shell` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`jobs`](../packages/jobs/jobs), [`llm`](../packages/llm/llm), [`sandbox`](../packages/sandbox/sandbox), [`sandbox-policy`](../packages/sandbox/sandbox-policy), [`shell`](../packages/shell/shell), [`shell-env`](../packages/shell/shell-env), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools), [`user-approval`](../packages/interaction/user-approval) |
 | [`tool-pwsh`](../packages/shell/tool-pwsh) | `shell` | [`agent`](../packages/core/agent), [`invariants`](../packages/runtime-diagnostics/invariants), [`jobs`](../packages/jobs/jobs), [`llm`](../packages/llm/llm), [`sandbox`](../packages/sandbox/sandbox), [`sandbox-policy`](../packages/sandbox/sandbox-policy), [`shell`](../packages/shell/shell), [`shell-env`](../packages/shell/shell-env), [`system-prompt`](../packages/core/system-prompt), [`tools`](../packages/core/tools), [`user-approval`](../packages/interaction/user-approval) |

@@ -1,0 +1,39 @@
+# The dsh-ia bundle patch: the industrial-automation closed-loop layer. It
+# inserts the five capability services and the model-facing tool surface as
+# one layer over any dsh profile; later layers address these rows by id.
+# Automation level, knowledge minima, and tool enablement are deployment
+# choices stated here with the architecture's defaults (A1, §5.1).
+
+- insert:
+    # The deterministic adjudication layer: every built-in validator active.
+    - id: ia-verifier
+      name: '@deepseek-ai/dsh-ia-verifier'
+
+    # The gate engine with the six mandatory human gates; A1 keeps every
+    # release human-decided (§5.1 — A2 mounts rules on standard projects).
+    - id: ia-gates
+      name: '@deepseek-ai/dsh-ia-gates'
+      config:
+        level: A1
+
+    # The append-only traceability graph behind requirement matrices and the
+    # three-level change-impact analysis.
+    - id: ia-trace
+      name: '@deepseek-ai/dsh-ia-trace'
+
+    # Standards/templates/cases libraries with cold-start minima (§6.2).
+    - id: ia-knowledge
+      name: '@deepseek-ai/dsh-ia-knowledge'
+      config:
+        minTemplates: 20
+        minCases: 30
+        maxSearchResults: 10
+
+    # The conveyor-line DAG orchestrator: verify-then-gate transitions, the
+    # bounded inner loop, and escalation packages.
+    - id: ia-orchestrator
+      name: '@deepseek-ai/dsh-ia-orchestrator'
+
+    # The agent surface: ia_verify, ia_trace, ia_gate, ia_knowledge, ia_project.
+    - id: tool-ia
+      name: '@deepseek-ai/dsh-tool-ia'

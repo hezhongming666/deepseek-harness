@@ -867,6 +867,118 @@ export interface Config {
 
 来源：[`packages/host/webserver/src/index.ts:45`](../packages/host/webserver/src/index.ts)
 
+<a id="deepseek-aidsh-ia-gates"></a>
+
+## `@deepseek-ai/dsh-ia-gates`
+
+```ts config-catalog
+/**
+ * Gate service configuration.
+ */
+export interface Config {
+  /**
+   * Deployment automation level, one of `A0`–`A3` (default `A1`). Anything
+   * else fails at load.
+   */
+  level?: AutomationLevel
+}
+
+/**
+ * Automation level of one deployment: what the agent may do before a human
+ * decides. A0 assists only, A1 generates with automatic inner-loop repair but
+ * stops at gates, A2 releases rule-bound gates automatically, A3 adds
+ * automatic operation-loop proposals. Levels never relax always-human gates.
+ */
+export type AutomationLevel = 'A0' | 'A1' | 'A2' | 'A3'
+```
+
+来源：[`packages/industrial/ia-gates/src/index.ts:83`](../packages/industrial/ia-gates/src/index.ts)
+
+<a id="deepseek-aidsh-ia-knowledge"></a>
+
+## `@deepseek-ai/dsh-ia-knowledge`
+
+```ts config-catalog
+/**
+ * Knowledge service configuration: the cold-start minimum scales and the
+ * retrieval result cap.
+ */
+export interface Config {
+  /** Minimum approved+reviewing template entries for cold-start (§6.2, default 20). */
+  minTemplates?: number
+  /** Minimum case entries for cold-start (§6.2, default 30). */
+  minCases?: number
+  /** Maximum hits one retrieval returns (default 10). */
+  maxSearchResults?: number
+}
+```
+
+来源：[`packages/industrial/ia-knowledge/src/index.ts:33`](../packages/industrial/ia-knowledge/src/index.ts)
+
+<a id="deepseek-aidsh-ia-orchestrator"></a>
+
+## `@deepseek-ai/dsh-ia-orchestrator`
+
+依赖：`iaVerifiers` · `iaGates`
+
+```ts config-catalog
+/**
+ * Orchestrator configuration.
+ */
+export interface Config {
+  /** The template instantiated by {@link IaOrchestratorService.initProject} (default `conveyor-line`). */
+  template?: string
+}
+```
+
+来源：[`packages/industrial/ia-orchestrator/src/index.ts:101`](../packages/industrial/ia-orchestrator/src/index.ts)
+
+<a id="deepseek-aidsh-ia-verifier"></a>
+
+## `@deepseek-ai/dsh-ia-verifier`
+
+```ts config-catalog
+/**
+ * Registry configuration.
+ */
+export interface Config {
+  /**
+   * Built-in validator kinds to activate at load (default all three).
+   * An entry outside `st-syntax`, `st-lint`, `io-consistency` fails at load.
+   */
+  builtins?: string[]
+}
+```
+
+来源：[`packages/industrial/ia-verifier/src/index.ts:35`](../packages/industrial/ia-verifier/src/index.ts)
+
+<a id="deepseek-aidsh-ia-verifier-openness"></a>
+
+## `@deepseek-ai/dsh-ia-verifier-openness`
+
+需要：`iaVerifiers`
+
+```ts config-catalog
+/**
+ * Plugin configuration. `url` is required: it names the deployment-owned
+ * Openness bridge serving the TIA project to compile against.
+ */
+export interface Config {
+  /** Absolute http(s) URL of the running Openness bridge, e.g. `http://127.0.0.1:4281`. */
+  url?: string
+  /**
+   * The TIA block name the submitted source defines and is imported as
+   * (default `IACheck`). The source must declare a block with exactly this
+   * name, or the import fails with "was not generated from the source".
+   */
+  blockName?: string
+  /** Per-request bridge timeout in milliseconds (default 300000). */
+  requestTimeoutMs?: number
+}
+```
+
+来源：[`packages/industrial/ia-verifier-openness/src/index.ts:43`](../packages/industrial/ia-verifier-openness/src/index.ts)
+
 <a id="deepseek-aidsh-invariants"></a>
 
 ## `@deepseek-ai/dsh-invariants`
@@ -2623,6 +2735,22 @@ export interface Config {
 
 来源：[`packages/goal/tool-goal/src/index.ts:26`](../packages/goal/tool-goal/src/index.ts)
 
+<a id="deepseek-aidsh-tool-ia"></a>
+
+## `@deepseek-ai/dsh-tool-ia`
+
+依赖：`tools` · `iaVerifiers` · `iaGates` · `iaTrace` · `iaKnowledge` · `iaOrchestrator`
+
+```ts config-catalog
+/** Tool package configuration. */
+export interface Config {
+  /** Which tools to register; every omitted name stays unregistered (default: all five). */
+  enabled?: string[]
+}
+```
+
+来源：[`packages/industrial/tool-ia/src/index.ts:30`](../packages/industrial/tool-ia/src/index.ts)
+
 <a id="deepseek-aidsh-tool-jobs"></a>
 
 ## `@deepseek-ai/dsh-tool-jobs`
@@ -3377,6 +3505,7 @@ export interface Config {
 - `@deepseek-ai/dsh-host-directory-picker-auto` — 需要 `webServer` · `loader`（[`packages/host/directory-picker-auto/src/index.ts`](../packages/host/directory-picker-auto/src/index.ts)）
 - `@deepseek-ai/dsh-host-directory-picker-native`（[`packages/host/directory-picker-native/src/index.ts`](../packages/host/directory-picker-native/src/index.ts)）
 - `@deepseek-ai/dsh-host-plugin-inventory` — 需要 `loader`（[`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts)）
+- `@deepseek-ai/dsh-ia-trace`（[`packages/industrial/ia-trace/src/index.ts`](../packages/industrial/ia-trace/src/index.ts)）
 - `@deepseek-ai/dsh-llm`（[`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts)）
 - `@deepseek-ai/dsh-lsp`（[`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts)）
 - `@deepseek-ai/dsh-schedule` — 需要 `agents` · `sessions` · `tools` · `sessionPersistence`（[`packages/schedule/schedule/src/index.ts`](../packages/schedule/schedule/src/index.ts)）
@@ -3436,6 +3565,7 @@ export interface Config {
 - `@deepseek-ai/dsh-code-runtime-python`（[`packages/code-runtime/code-runtime-python/src/index.ts`](../packages/code-runtime/code-runtime-python/src/index.ts)）
 - `@deepseek-ai/dsh-home-paths`（[`packages/util/home-paths/src/index.ts`](../packages/util/home-paths/src/index.ts)）
 - `@deepseek-ai/dsh-hook-protocol`（[`packages/hooks/hook-protocol/src/index.ts`](../packages/hooks/hook-protocol/src/index.ts)）
+- `@deepseek-ai/dsh-ia`（[`packages/bundle/ia/src/index.ts`](../packages/bundle/ia/src/index.ts)）
 - `@deepseek-ai/dsh-launch-environment`（[`packages/util/launch-environment/src/index.ts`](../packages/util/launch-environment/src/index.ts)）
 - `@deepseek-ai/dsh-llm-mock-server`（[`packages/test-support/llm-mock-server/src/index.ts`](../packages/test-support/llm-mock-server/src/index.ts)）
 - `@deepseek-ai/dsh-loader-smoke`（[`packages/test-support/loader-smoke/src/index.ts`](../packages/test-support/loader-smoke/src/index.ts)）

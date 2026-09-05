@@ -26,6 +26,12 @@ namespace OpennessBridge
         public sealed class RunRequest
         {
             public string RunId { get; set; } = string.Empty;
+            /// <summary>Per-request action override; falls back to the config's action when absent.</summary>
+            public string? Action { get; set; }
+            /// <summary>The block name the `verify` action imports the source as.</summary>
+            public string? BlockName { get; set; }
+            /// <summary>The SCL source text the `verify` action compiles.</summary>
+            public string? Source { get; set; }
             public Dictionary<string, JsonElement> Params { get; set; } = new Dictionary<string, JsonElement>();
         }
 

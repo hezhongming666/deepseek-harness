@@ -197,6 +197,18 @@ flowchart LR
   svc_specLoopAdapter["ctx.specLoopAdapter<br/>Spec-loop software adapter seam"]
   pkg_provider_openness["provider-openness"]
   pkg_tool_spec_loop["tool-spec-loop"]
+  pkg_ia_verifier["ia-verifier"]
+  svc_iaVerifiers["ctx.iaVerifiers<br/>Deterministic verifier registry"]
+  pkg_ia_verifier_openness["ia-verifier-openness"]
+  pkg_ia_orchestrator["ia-orchestrator"]
+  pkg_tool_ia["tool-ia"]
+  pkg_ia_gates["ia-gates"]
+  svc_iaGates["ctx.iaGates<br/>Gate engine"]
+  pkg_ia_trace["ia-trace"]
+  svc_iaTrace["ctx.iaTrace<br/>Traceability graph"]
+  pkg_ia_knowledge["ia-knowledge"]
+  svc_iaKnowledge["ctx.iaKnowledge<br/>Knowledge libraries"]
+  svc_iaOrchestrator["ctx.iaOrchestrator<br/>Project DAG orchestrator"]
   pkg_lsp["lsp"]
   svc_lsp["ctx.lsp<br/>Language-server navigation seam"]
   pkg_lsp_local["lsp-local"]
@@ -243,6 +255,12 @@ flowchart LR
   pkg_fs_local --> svc_fs
   pkg_fs_sandbox --> svc_fs
   pkg_goal --> svc_goals
+  pkg_ia_gates --> svc_iaGates
+  pkg_ia_knowledge --> svc_iaKnowledge
+  pkg_ia_orchestrator --> svc_iaOrchestrator
+  pkg_ia_trace --> svc_iaTrace
+  pkg_ia_verifier --> svc_iaVerifiers
+  pkg_ia_verifier_openness --> svc_iaVerifiers
   pkg_invariants --> svc_invariants
   pkg_jobs --> svc_jobs
   pkg_jobs_local --> svc_jobs
@@ -341,6 +359,13 @@ flowchart LR
   svc_e2b --> pkg_fs_e2b
   svc_e2b --> pkg_subprocess_e2b
   svc_fs --> pkg_tool_fs
+  svc_iaGates --> pkg_ia_orchestrator
+  svc_iaGates --> pkg_tool_ia
+  svc_iaKnowledge --> pkg_tool_ia
+  svc_iaOrchestrator --> pkg_tool_ia
+  svc_iaTrace --> pkg_tool_ia
+  svc_iaVerifiers --> pkg_ia_orchestrator
+  svc_iaVerifiers --> pkg_tool_ia
   svc_invariants --> pkg_agent
   svc_invariants --> pkg_agent_loop
   svc_invariants --> pkg_scope
@@ -492,6 +517,11 @@ flowchart LR
 | `ctx.clientModules` | `core` | `modules` | - | `hmr` | - | 通过增量 `dsh.client` 扫描组合 __DSH_BOOT__ 入口图，提供插件组合包，并通知重建／图变更订阅方。 |
 | `ctx.workflowEngine` | `seam` | [`workflow`](../packages/workflow/workflow) | [`workflow-worker-thread`](../packages/workflow/workflow-worker-thread) | [`tool-workflow`](../packages/workflow/tool-workflow), [`tool-ralph`](../packages/workflow/tool-ralph) | - | 每个上下文使用一个引擎，与 bash 相同，且没有具名提供方注册表；通用工作流与固定 Ralph 消费方启动运行，其中的 agent() 调用通过 ctx.subagents 扇出。 |
 | `ctx.specLoopAdapter` | `seam` | [`spec-loop`](../packages/spec-loop/spec-loop) | [`provider-openness`](../packages/spec-loop/provider-openness) | [`tool-spec-loop`](../packages/spec-loop/tool-spec-loop) | - | 每个上下文一个适配器；随附的 TIA Portal Openness provider（provider-openness）经 HTTP JSON 驱动 Openness 桥，其他集成仍属部署自有。实现方提供 validate（廉价的 S1 门禁）和 run（带结构化结果的执行），确定性 spec-loop 引擎对每次迭代进行分类。 |
+| `ctx.iaVerifiers` | `core` | [`ia-verifier`](../packages/industrial/ia-verifier) | [`ia-verifier-openness`](../packages/industrial/ia-verifier-openness) | [`ia-orchestrator`](../packages/industrial/ia-orchestrator), [`tool-ia`](../packages/industrial/tool-ia) | - | 具名纯检查，内置结构化文本语法/Lint 与 IO-符号一致性验证器；工业闭环的裁决层。openness 提供方注册 tia-compile 种类，经 Openness 桥以真实 TIA Portal 编译裁决控制程序。 |
+| `ctx.iaGates` | `core` | [`ia-gates`](../packages/industrial/ia-gates) | - | [`ia-orchestrator`](../packages/industrial/ia-orchestrator), [`tool-ia`](../packages/industrial/tool-ia) | - | 六道强制人工闸门、A0–A3 自动化等级与审批通道裁决；恒人工危险闸门永不接受自动放行规则。 |
+| `ctx.iaTrace` | `core` | [`ia-trace`](../packages/industrial/ia-trace) | - | [`tool-ia`](../packages/industrial/tool-ia) | - | 只追加节点、类型化边与变更记录，带三级影响分析与需求矩阵。 |
+| `ctx.iaKnowledge` | `core` | [`ia-knowledge`](../packages/industrial/ia-knowledge) | - | [`tool-ia`](../packages/industrial/tool-ia) | - | 标准/模板/案例库，强制引用、冷启动就绪与 pending-review 学习沉淀。 |
+| `ctx.iaOrchestrator` | `core` | [`ia-orchestrator`](../packages/industrial/ia-orchestrator) | - | [`tool-ia`](../packages/industrial/tool-ia) | - | 输送线阶段机，带验证后闸门流转、有界内环与升级包。 |
 | `ctx.lsp` | `seam` | [`lsp`](../packages/lsp/lsp) | `lsp-local` | [`tool-lsp`](../packages/lsp/tool-lsp) | - | 提供方注册与选择，加上恰好四种操作的标准化查询执行；该 seam 不提供协议逃生口，后端必须转换为标准化请求和结果。 |
 | `ctx.vision` | `seam` | [`vision`](../packages/vision/vision) | [`vision-openai`](../packages/vision/vision-openai) | [`tool-vision`](../packages/vision/tool-vision) | - | 每个上下文一个提供方注册表，执行时选择、从不依赖注册顺序；OpenAI 兼容提供方实现多模态 chat/completions，tool-vision 消费方暴露面向模型的 understand_image 工具。 |
 | `ctx.apiProxy` | `core` | `apiproxy` | - | `connection` | - | 与传输无关的 Host 网关接口：它分派浏览器 API 调用，每条打开的 Host 流自行订阅转发事件，而不是由广播方法向其推送。 |

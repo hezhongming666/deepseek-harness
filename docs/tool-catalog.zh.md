@@ -35,6 +35,7 @@
 | `@deepseek-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`、`ctx.workflowEngine`、`ctx.subagents`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents every fresh round)` | `tool/call`、`tool/result`、`workflow and child session events during execution` | - | 固定的前台工作流会在每个 Round 启动一个全新的结构化子级；模型只能选择不可变目标和可选的 Round 上限。 |
 | `@deepseek-ai/dsh-tool-skill` | `skill` | `ctx.tools`、`ctx.agents`、`ctx.skills` | `tool/call`、`tool/result`、`user/message replacement catalogs via agent.inject()` | - | - |
 | `@deepseek-ai/dsh-tool-spec-loop` | `spec_loop` | `ctx.tools`、`ctx.specLoopAdapter`、`ctx.systemPrompt`、`ctx.llm for candidate generation` | `tool/call`、`tool/result`、`independent LLM generation requests during execution` | - | 一次调用即通过已挂载适配器运行完整确定性闭环；模型只提供 spec 契约与可选起始候选。生成经由 LLM seam，使用配置的多模型回退链。 |
+| `@deepseek-ai/dsh-tool-ia` | `ia_gate`、`ia_knowledge`、`ia_project`、`ia_trace`、`ia_verify` | `ctx.tools`、`ctx.iaVerifiers`、`ctx.iaGates`、`ctx.iaTrace`、`ctx.iaKnowledge`、`ctx.iaOrchestrator` | `tool/call`、`tool/result`、`gate requests through ctx.iaGates` | - | 五个闭环工具：验证运行确定性本地验证器，闸门请求绝不裁决，追溯与项目状态按调用 Agent 作用域化，知识记录以 pending-review 入库。 |
 | `@deepseek-ai/dsh-tool-vision` | `understand_image` | `ctx.tools`、`ctx.vision`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`independent vision model requests during execution` | - | provider 选择留在 ctx.vision 之后，模型可见 schema 跨提供方保持稳定；本地图片路径经可选文件系统解析为 data URI。 |
 | `@deepseek-ai/dsh-tool-session-query` | `session_event_read`、`session_event_search`、`session_event_trace`、`session_search`、`session_trace` | `ctx.tools`、`ctx.systemPrompt`、`ctx.sessionQuery`、`a calling Agent for workspace authority` | `tool/call`、`tool/result` | - | 这 5 个只读工具会隐藏提供方游标，并根据不可变的调用 agent 会话为每个结果授权。该包需要选择启用；需要强制截止时间或限制行内输出的组合还会挂载通用超时或 spill 策略。 |
 | `@deepseek-ai/dsh-tool-subagent` | `subagent` | `ctx.tools`、`ctx.subagents`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`child session events through the chosen provider` | `subagent`、`subagent_fork` | 注册的工具名称取决于加载时 `toolName` 配置（默认为 `subagent`）；上述 schema 对应默认值。随产品发布的组合会为每个 subagent 后端加载一次该包，因此模型还会看到绑定到 fork 后端的 `subagent_fork`。每个实例的描述、`run_in_background` 参数与 system prompt 策略取决于它自己的 `backgroundMode` 和 `enableRunInBackground`，因此两个随附 schema 并不相同：`subagent` 为 `continuable`，省略参数时默认后台运行，并由 runtime 自动投递结束结果；`subagent_fork` 保持 `one-shot`，省略参数时默认前台运行。详见 `packages/bundle/base/cordis.patch.yml` 和 `examples/acp-agent/cordis.yml`。 |
@@ -1296,6 +1297,296 @@ lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，�
 来源：[`packages/spec-loop/tool-spec-loop/src/index.ts`](../packages/spec-loop/tool-spec-loop/src/index.ts)
 
 一次调用即通过已挂载适配器运行完整确定性闭环；模型只提供 spec 契约与可选起始候选。生成经由 LLM seam，使用配置的多模型回退链。
+
+<a id="deepseek-aidsh-tool-ia"></a>
+
+## `@deepseek-ai/dsh-tool-ia`
+
+### `ia_gate`
+
+列出项目闸门并请求一道闸门放行。闸门裁决属于人工（或在自动化等级 A2/A3 生效的已注册自动放行规则）：你只能请求，绝不能裁决。请求保持挂起时，审批通道会代你询问；无可用应答者时请求保持挂起，你必须告知人工监督者。危险闸门（安全评审、首次上电、验收签字、影响生产的变更）始终需要人工裁决。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "List gate status or request one gate.",
+      "enum": [
+        "list",
+        "request"
+      ]
+    },
+    "gateId": {
+      "type": "string",
+      "description": "The gate to request (request)."
+    },
+    "reason": {
+      "type": "string",
+      "description": "Why the gate is requested now (request)."
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Bounded evidence strings, e.g. verifier summaries (request).",
+      "items": {
+        "type": "string"
+      }
+    },
+    "context": {
+      "type": "string",
+      "description": "Optional project context summary (request)."
+    }
+  },
+  "required": [
+    "action"
+  ]
+}
+```
+
+来源：[`packages/industrial/tool-ia/src/index.ts`](../packages/industrial/tool-ia/src/index.ts)
+
+### `ia_knowledge`
+
+搜索并投喂工业知识库（标准、模板、案例）。每条命中都携带其来源与版本引用——复用内容时请引用它们。通过本工具记录即学习沉淀：条目以 `pending-review` 入库，稍后由人工批准，因此只记录已验证的经验（例如重验通过后的失败-修复对）。当库低于冷启动最小规模时，检索结果标记 `degraded: true`，你必须声明工作没有知识检索背书。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "Search a library, record one entry, or read the cold-start readiness.",
+      "enum": [
+        "search",
+        "record",
+        "readiness"
+      ]
+    },
+    "library": {
+      "type": "string",
+      "description": "The library: standards | templates | cases.",
+      "enum": [
+        "standards",
+        "templates",
+        "cases"
+      ]
+    },
+    "query": {
+      "type": "string",
+      "description": "Whitespace-separated search terms (search)."
+    },
+    "title": {
+      "type": "string",
+      "description": "Entry title (record)."
+    },
+    "content": {
+      "type": "string",
+      "description": "Entry body (record)."
+    },
+    "tags": {
+      "type": "array",
+      "description": "Classification tags (record).",
+      "items": {
+        "type": "string"
+      }
+    },
+    "source": {
+      "type": "string",
+      "description": "Citation source: project, clause, or document (record, mandatory)."
+    },
+    "version": {
+      "type": "string",
+      "description": "Cited source version (record, mandatory)."
+    }
+  },
+  "required": [
+    "action"
+  ]
+}
+```
+
+来源：[`packages/industrial/tool-ia/src/index.ts`](../packages/industrial/tool-ia/src/index.ts)
+
+### `ia_project`
+
+驱动当前工业项目的编排器 DAG：从模板实例化阶段链、推进阶段、提交产物。提交先运行该阶段的确定性验证器；失败以报告返回修复阶段，重试预算耗尽后带着你不应自行解决的升级包上报人工监督者。绑定闸门的阶段停在 `gated`，直到人工（或已配置规则）裁决；轮询状态查看裁决。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "The project operation.",
+      "enum": [
+        "init",
+        "list",
+        "status",
+        "advance",
+        "submit"
+      ]
+    },
+    "projectId": {
+      "type": "string",
+      "description": "Target project id; defaults to the project this agent initialized."
+    },
+    "template": {
+      "type": "string",
+      "description": "Template name for init; the default is conveyor-line."
+    },
+    "stageId": {
+      "type": "string",
+      "description": "Stage id for advance/submit."
+    },
+    "text": {
+      "type": "string",
+      "description": "Artifact text for submit."
+    },
+    "vendorSource": {
+      "type": "string",
+      "description": "Optional vendor-dialect source for external compile verifiers such as tia-compile (submit)."
+    },
+    "reference": {
+      "type": "string",
+      "description": "Optional artifact reference, e.g. a trace node id (submit)."
+    }
+  },
+  "required": [
+    "action"
+  ]
+}
+```
+
+来源：[`packages/industrial/tool-ia/src/index.ts`](../packages/industrial/tool-ia/src/index.ts)
+
+### `ia_trace`
+
+维护当前项目的只追加追溯图：记录需求/设计/实现/测试/变更节点，用类型化边链接它们，记录变更请求，运行三级变更影响分析，读取需求矩阵。每条需求最终必须链接到至少一个实现与一个测试（矩阵显示覆盖缺口）。节点从不编辑——改以记录变更请求。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "Which trace operation to run.",
+      "enum": [
+        "record",
+        "link",
+        "change",
+        "impact",
+        "matrix"
+      ]
+    },
+    "kind": {
+      "type": "string",
+      "description": "Trace node kind: requirement | design | implementation | test | change (record).",
+      "enum": [
+        "requirement",
+        "design",
+        "implementation",
+        "test",
+        "change"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "description": "Short node title (record)."
+    },
+    "detail": {
+      "type": "string",
+      "description": "Optional longer description (record)."
+    },
+    "tags": {
+      "type": "array",
+      "description": "Classification tags (record).",
+      "items": {
+        "type": "string"
+      }
+    },
+    "basis": {
+      "type": "string",
+      "description": "Source citation or evidence reference (record)."
+    },
+    "from": {
+      "type": "string",
+      "description": "Source node id (link)."
+    },
+    "to": {
+      "type": "string",
+      "description": "Target node id (link)."
+    },
+    "linkKind": {
+      "type": "string",
+      "description": "Edge kind: derives | implements | verifies | changes (link).",
+      "enum": [
+        "derives",
+        "implements",
+        "verifies",
+        "changes"
+      ]
+    },
+    "nodeIds": {
+      "type": "array",
+      "description": "Changed node ids (change, impact).",
+      "items": {
+        "type": "string"
+      }
+    },
+    "reason": {
+      "type": "string",
+      "description": "Why the change is made (change)."
+    }
+  },
+  "required": [
+    "action"
+  ]
+}
+```
+
+来源：[`packages/industrial/tool-ia/src/index.ts`](../packages/industrial/tool-ia/src/index.ts)
+
+### `ia_verify`
+
+对一个产物运行一个确定性工业自动化验证器，返回带诊断与证据的通过/失败报告。验证器是裁决层：它们是纯的、可复现的检查（编译器式的语法与 Lint 检查、IO-符号一致性），绝不是模型判断。在声称任何产物就绪于下一项目阶段之前使用它；失败报告必须修复并重验。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "description": "The verifier to run, one of the registered kinds.",
+      "enum": [
+        "st-syntax",
+        "st-lint",
+        "io-consistency"
+      ]
+    },
+    "source": {
+      "type": "string",
+      "description": "The artifact text: Structured Text source for st-syntax/st-lint, TIA SCL source for tia-compile, the IO-symbol JSON document for io-consistency."
+    },
+    "vendorSource": {
+      "type": "string",
+      "description": "Optional vendor-dialect source for external compile validators such as tia-compile; the validator falls back to `source` when omitted."
+    },
+    "fileName": {
+      "type": "string",
+      "description": "Optional file name used only for diagnostic framing."
+    }
+  },
+  "required": [
+    "kind",
+    "source"
+  ]
+}
+```
+
+来源：[`packages/industrial/tool-ia/src/index.ts`](../packages/industrial/tool-ia/src/index.ts)
+
+五个闭环工具：验证运行确定性本地验证器，闸门请求绝不裁决，追溯与项目状态按调用 Agent 作用域化，知识记录以 pending-review 入库。
 
 <a id="deepseek-aidsh-tool-vision"></a>
 

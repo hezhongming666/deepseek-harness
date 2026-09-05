@@ -125,7 +125,7 @@ namespace OpennessBridge
                     {
                         var runId = ReadBody<Wire.RunRequest>(context);
                         var cancelled = new Func<bool>(() => cancelledRuns.ContainsKey(runId.RunId));
-                        var response = host.Run(runId.RunId, runId.Params, cancelled);
+                        var response = host.Run(runId.RunId, runId.Params, runId.Action, runId.BlockName, runId.Source, cancelled);
                         if (cancelledRuns.TryRemove(runId.RunId, out _))
                         {
                             response.Status = "killed";

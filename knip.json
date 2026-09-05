@@ -69,6 +69,7 @@
         "jsonrpc-agent/tests/fixtures/subagent/subagent-dsh-sdk/driver.ts",
         "jsonrpc-agent/tests/fixtures/subagent/subagent-dsh-sdk/child-mock-llm.ts",
         "jsonrpc-agent/tests/fixtures/subagent/subagent-dsh-sdk/mock-delegating-llm.ts",
+        "industrial-ia/smoke.mjs",
         "*/tests/**/*.e2e.ts",
         "*/tests/**/*.snapshot.ts"
       ],
@@ -796,6 +797,14 @@
       ]
     },
     "packages/bundle/base": {
+      "ignoreDependencies": [
+        "@deepseek-ai/.+"
+      ]
+    },
+    "packages/bundle/ia": {
+      "project": [
+        "src/**/*.ts"
+      ],
       "ignoreDependencies": [
         "@deepseek-ai/.+"
       ]

@@ -46,12 +46,18 @@ namespace OpennessBridge
         /// </summary>
         /// <param name="runId">The adapter's correlation id.</param>
         /// <param name="parameters">The candidate parameter set.</param>
+        /// <param name="action">Per-request action override; the config's action applies when null.</param>
+        /// <param name="blockName">The `verify` action's target block name.</param>
+        /// <param name="source">The `verify` action's SCL source text.</param>
         /// <param name="cancelled">True when the adapter cancelled this run.</param>
         /// <returns>The run outcome; `killed` when cancelled.</returns>
         /// <exception cref="InfrastructureException">The backing host is unavailable.</exception>
         Wire.RunResponse Run(
             string runId,
             IReadOnlyDictionary<string, JsonElement> parameters,
+            string? action,
+            string? blockName,
+            string? source,
             Func<bool> cancelled);
     }
 }

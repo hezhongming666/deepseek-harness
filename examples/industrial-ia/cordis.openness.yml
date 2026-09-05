@@ -1,0 +1,14 @@
+# Optional real-vendor compile overlay over examples/industrial-ia/cordis.yml.
+# Registers the tia-compile validator, which adjudicates every control-program
+# submission through a real TIA Portal compile served by a running Openness
+# bridge (see packages/spec-loop/provider-openness for the bridge). `url` is
+# deployment-owned: point it at the bridge serving the scratch TIA project.
+# Run with:
+#   dsh web --patch examples/industrial-ia/cordis.yml --patch examples/industrial-ia/cordis.openness.yml
+
+- insert:
+    - id: ia-verifier-openness
+      name: '@deepseek-ai/dsh-ia-verifier-openness'
+      config:
+        url: http://127.0.0.1:4281
+        blockName: IACheck

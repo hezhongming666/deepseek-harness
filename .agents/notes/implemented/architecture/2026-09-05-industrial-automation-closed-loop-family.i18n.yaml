@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-09-05-industrial-automation-closed-loop-family.md
+2026-09-05-industrial-automation-closed-loop-family.md: f1d419ee26ddbf3f70e5256a92fc754ce581a0f1
+2026-09-05-industrial-automation-closed-loop-family.zh.md: d671e4c889b055b665f3771e18765938bae852f8

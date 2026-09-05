@@ -433,6 +433,9 @@ namespace OpennessBridge
         public Wire.RunResponse Run(
             string runId,
             IReadOnlyDictionary<string, JsonElement> parameters,
+            string? actionOverride,
+            string? blockName,
+            string? source,
             Func<bool> cancelled)
         {
             var session = EnsureSession();
@@ -440,18 +443,23 @@ namespace OpennessBridge
             {
                 return new Wire.RunResponse { RunId = runId, Status = "killed", Error = "cancelled before execution" };
             }
+            var action = string.IsNullOrWhiteSpace(actionOverride) ? config.Action : actionOverride;
             Wire.RunResponse response;
-            if (config.Action == "generate")
+            if (action == "generate")
             {
                 response = RunGenerate(runId, session, parameters, cancelled);
             }
-            else if (config.Action == "import")
+            else if (action == "import")
             {
                 response = RunImport(runId, session, parameters, cancelled);
             }
-            else if (config.Action == "export")
+            else if (action == "export")
             {
                 response = RunExport(runId, session, cancelled);
+            }
+            else if (action == "verify")
+            {
+                response = RunVerify(runId, session, blockName, source, cancelled);
             }
             else
             {
@@ -460,7 +468,7 @@ namespace OpennessBridge
                 {
                     return writeError;
                 }
-                response = config.Action == "online"
+                response = action == "online"
                     ? RunOnline(runId, session, cancelled)
                     : RunCompile(runId, session, cancelled);
             }
@@ -560,14 +568,112 @@ namespace OpennessBridge
         }
 
         /// <summary>
+        /// The verify action: import the request's SCL source as the named
+        /// block through the external-source route and compile it, reporting
+        /// the error/warning counts and messages even when the compile finds
+        /// errors — the verdict belongs to the caller, never to the bridge.
+        /// A later verify with the same block name overwrites the block.
+        /// </summary>
+        private Wire.RunResponse RunVerify(
+            string runId,
+            Session session,
+            string? blockName,
+            string? source,
+            Func<bool> cancelled)
+        {
+            var total = Stopwatch.StartNew();
+            if (string.IsNullOrWhiteSpace(blockName))
+            {
+                return new Wire.RunResponse
+                {
+                    RunId = runId,
+                    Status = "diverged",
+                    Error = "the verify action needs a non-empty `blockName`",
+                    Environment = session.Environment,
+                };
+            }
+            if (source == null)
+            {
+                return new Wire.RunResponse
+                {
+                    RunId = runId,
+                    Status = "diverged",
+                    Error = "the verify action needs a `source` field with the SCL text",
+                    Environment = session.Environment,
+                };
+            }
+            if (cancelled())
+            {
+                return new Wire.RunResponse { RunId = runId, Status = "killed", Error = "cancelled during execution" };
+            }
+
+            var tempPath = Path.Combine(
+                Path.GetTempPath(),
+                $"openness-bridge-verify-{SanitizeFileToken(blockName)}-{SanitizeFileToken(runId)}.scl");
+            try
+            {
+                File.WriteAllText(tempPath, source);
+                ImportExternalSource(session, blockName, tempPath);
+            }
+            catch (InfrastructureException)
+            {
+                throw;
+            }
+            catch (Exception error)
+            {
+                return new Wire.RunResponse
+                {
+                    RunId = runId,
+                    Status = "diverged",
+                    Error = $"verify import of block {JsonSerializer.Serialize(blockName)} failed: {error.Message}",
+                    Environment = session.Environment,
+                };
+            }
+            finally
+            {
+                try
+                {
+                    File.Delete(tempPath);
+                }
+                catch
+                {
+                    // Best-effort temp-file cleanup.
+                }
+            }
+            if (cancelled())
+            {
+                return new Wire.RunResponse { RunId = runId, Status = "killed", Error = "cancelled during execution" };
+            }
+
+            var (failure, result, _) = CompileSoftware(runId, session, cancelled, treatErrorsAsDivergence: false);
+            if (failure != null)
+            {
+                return failure;
+            }
+            result!["blockName"] = JsonSerializer.SerializeToElement(blockName);
+            total.Stop();
+            return new Wire.RunResponse
+            {
+                RunId = runId,
+                Status = "success",
+                Result = result,
+                LicenseMs = total.ElapsedMilliseconds,
+                Environment = session.Environment,
+            };
+        }
+
+        /// <summary>
         /// Compile the PLC software and return the compile result fields plus
         /// the compile wall time, or a diverged/killed response on failure.
-        /// Shared by the compile and generate actions.
+        /// Shared by the compile and generate actions; the verify action calls
+        /// it with <paramref name="treatErrorsAsDivergence"/> false so the
+        /// counts and messages travel to the caller regardless of the verdict.
         /// </summary>
         private (Wire.RunResponse? failure, Dictionary<string, JsonElement>? result, long compileMs) CompileSoftware(
             string runId,
             Session session,
-            Func<bool> cancelled)
+            Func<bool> cancelled,
+            bool treatErrorsAsDivergence = true)
         {
             var stopwatch = Stopwatch.StartNew();
             CompilerResult compileResult;
@@ -613,8 +719,8 @@ namespace OpennessBridge
             var compileMs = stopwatch.ElapsedMilliseconds;
             var errors = compileResult.ErrorCount;
             var warnings = compileResult.WarningCount;
-            var messages = FlattenCompilerMessages(compileResult);
-            if (compileResult.State != CompilerResultState.Success)
+            var (messages, states) = FlattenCompilerMessages(compileResult);
+            if (treatErrorsAsDivergence && compileResult.State != CompilerResultState.Success)
             {
                 return (
                     new Wire.RunResponse
@@ -633,29 +739,34 @@ namespace OpennessBridge
                 ["compileWarnings"] = JsonDocument.Parse(warnings.ToString(CultureInfo.InvariantCulture)).RootElement.Clone(),
                 ["compileMs"] = JsonDocument.Parse(compileMs.ToString(CultureInfo.InvariantCulture)).RootElement.Clone(),
                 ["compileMessages"] = JsonSerializer.SerializeToElement(messages),
+                ["compileMessageStates"] = JsonSerializer.SerializeToElement(states),
             };
             return (null, result, compileMs);
         }
 
-        /// <summary>Flatten the compiler result's nested messages into strings.</summary>
-        private static List<string> FlattenCompilerMessages(CompilerResult result)
+        /// <summary>Flatten the compiler result's nested messages into strings plus per-message severity states.</summary>
+        private static (List<string> messages, List<string> states) FlattenCompilerMessages(CompilerResult result)
         {
             var messages = new List<string>();
+            var states = new List<string>();
             foreach (var message in result.Messages)
             {
-                CollectCompilerMessages(message, messages);
+                CollectCompilerMessages(message, messages, states);
             }
-            return messages;
+            return (messages, states);
         }
 
-        private static void CollectCompilerMessages(CompilerResultMessage message, List<string> messages)
+        private static void CollectCompilerMessages(CompilerResultMessage message, List<string> messages, List<string> states)
         {
             messages.Add(string.IsNullOrEmpty(message.Path)
                 ? message.Description
                 : $"{message.Path}: {message.Description}");
+            states.Add(message.State == CompilerResultState.Error
+                ? "error"
+                : message.State == CompilerResultState.Warning ? "warning" : "info");
             foreach (var child in message.Messages)
             {
-                CollectCompilerMessages(child, messages);
+                CollectCompilerMessages(child, messages, states);
             }
         }
 

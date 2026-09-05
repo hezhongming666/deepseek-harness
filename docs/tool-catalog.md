@@ -33,6 +33,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@deepseek-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`, `ctx.workflowEngine`, `ctx.subagents`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents every fresh round)` | `tool/call`, `tool/result`, `workflow and child session events during execution` | - | A fixed foreground workflow starts one fresh structured child per round; the model selects only the immutable objective and an optional round cap. |
 | `@deepseek-ai/dsh-tool-skill` | `skill` | `ctx.tools`, `ctx.agents`, `ctx.skills` | `tool/call`, `tool/result`, `user/message replacement catalogs via agent.inject()` | - | - |
 | `@deepseek-ai/dsh-tool-spec-loop` | `spec_loop` | `ctx.tools`, `ctx.specLoopAdapter`, `ctx.systemPrompt`, `ctx.llm for candidate generation` | `tool/call`, `tool/result`, `independent LLM generation requests during execution` | - | One call runs the complete deterministic loop over the mounted adapter; the model supplies only the spec contract and an optional starting candidate. Generation goes through the LLM seam with the configured multi-model fallback chain. |
+| `@deepseek-ai/dsh-tool-ia` | `ia_gate`, `ia_knowledge`, `ia_project`, `ia_trace`, `ia_verify` | `ctx.tools`, `ctx.iaVerifiers`, `ctx.iaGates`, `ctx.iaTrace`, `ctx.iaKnowledge`, `ctx.iaOrchestrator` | `tool/call`, `tool/result`, `gate requests through ctx.iaGates` | - | The five closed-loop tools: verification runs deterministic local validators, gate requests never decide, trace and project state scope to the calling agent, and knowledge records enter pending-review. |
 | `@deepseek-ai/dsh-tool-vision` | `understand_image` | `ctx.tools`, `ctx.vision`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `independent vision model requests during execution` | - | Provider selection stays behind ctx.vision so the model-visible schema stays stable across providers; a local image path resolves through the optional filesystem into a data URI. |
 | `@deepseek-ai/dsh-tool-session-query` | `session_event_read`, `session_event_search`, `session_event_trace`, `session_search`, `session_trace` | `ctx.tools`, `ctx.systemPrompt`, `ctx.sessionQuery`, `a calling Agent for workspace authority` | `tool/call`, `tool/result` | - | The five read-only tools hide provider cursors and authorize every result from the immutable calling agent session. The package is opt-in; compositions that need enforced deadlines or bounded inline output also mount the generic timeout or spill policies. |
 | `@deepseek-ai/dsh-tool-subagent` | `subagent` | `ctx.tools`, `ctx.subagents`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `child session events through the chosen provider` | `subagent`, `subagent_fork` | The registered tool name is the load-time `toolName` config (default `subagent`); the schema above is that default. The shipped compositions load this package once per subagent backend, so the model additionally sees `subagent_fork` bound to the fork backend. Each instance's description, `run_in_background` parameter, and system-prompt policy follow its own `backgroundMode` and `enableRunInBackground`, so the two shipped schemas are not identical: `subagent` is `continuable` and defaults omitted calls to background with automatic settlement delivery, while `subagent_fork` stays `one-shot` and defaults them to foreground — see `packages/bundle/base/cordis.patch.yml` and `examples/acp-agent/cordis.yml`. |
@@ -1292,6 +1293,296 @@ Run a deterministic spec loop: iterate candidate parameters against a spec contr
 Source: [`packages/spec-loop/tool-spec-loop/src/index.ts`](../packages/spec-loop/tool-spec-loop/src/index.ts)
 
 One call runs the complete deterministic loop over the mounted adapter; the model supplies only the spec contract and an optional starting candidate. Generation goes through the LLM seam with the configured multi-model fallback chain.
+
+<a id="deepseek-aidsh-tool-ia"></a>
+
+## `@deepseek-ai/dsh-tool-ia`
+
+### `ia_gate`
+
+List the project gates and ask one gate to release. Gate decisions belong to humans (or to registered auto-release rules at automation level A2/A3): you can only request, never decide. When a request stays pending, the approval channel is asked on your behalf; without an available answerer the request remains pending and you must tell the human supervisor. Dangerous gates (safety review, first power-on, acceptance signature, production-affecting changes) always require a human decision.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "List gate status or request one gate.",
+      "enum": [
+        "list",
+        "request"
+      ]
+    },
+    "gateId": {
+      "type": "string",
+      "description": "The gate to request (request)."
+    },
+    "reason": {
+      "type": "string",
+      "description": "Why the gate is requested now (request)."
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Bounded evidence strings, e.g. verifier summaries (request).",
+      "items": {
+        "type": "string"
+      }
+    },
+    "context": {
+      "type": "string",
+      "description": "Optional project context summary (request)."
+    }
+  },
+  "required": [
+    "action"
+  ]
+}
+```
+
+Source: [`packages/industrial/tool-ia/src/index.ts`](../packages/industrial/tool-ia/src/index.ts)
+
+### `ia_knowledge`
+
+Search and feed the industrial knowledge libraries (standards, templates, cases). Every hit carries its source and version citation — cite them when you reuse the content. Recording through this tool is the learning sink: entries enter `pending-review` and a human approves them later, so record only verified experience (e.g. failure-repair pairs after a passing re-verification). When the libraries are below their cold-start minimum scale, search results say `degraded: true` and you must state that no knowledge retrieval backed your work.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "Search a library, record one entry, or read the cold-start readiness.",
+      "enum": [
+        "search",
+        "record",
+        "readiness"
+      ]
+    },
+    "library": {
+      "type": "string",
+      "description": "The library: standards | templates | cases.",
+      "enum": [
+        "standards",
+        "templates",
+        "cases"
+      ]
+    },
+    "query": {
+      "type": "string",
+      "description": "Whitespace-separated search terms (search)."
+    },
+    "title": {
+      "type": "string",
+      "description": "Entry title (record)."
+    },
+    "content": {
+      "type": "string",
+      "description": "Entry body (record)."
+    },
+    "tags": {
+      "type": "array",
+      "description": "Classification tags (record).",
+      "items": {
+        "type": "string"
+      }
+    },
+    "source": {
+      "type": "string",
+      "description": "Citation source: project, clause, or document (record, mandatory)."
+    },
+    "version": {
+      "type": "string",
+      "description": "Cited source version (record, mandatory)."
+    }
+  },
+  "required": [
+    "action"
+  ]
+}
+```
+
+Source: [`packages/industrial/tool-ia/src/index.ts`](../packages/industrial/tool-ia/src/index.ts)
+
+### `ia_project`
+
+Drive the orchestrator DAG of the current industrial project: instantiate the stage chain from a template, advance stages, and submit artifacts. Submissions run the stage's deterministic verifiers first; failures return the stage to repair with the reports, and exhausting the retry budget escalates to the human supervisor with a package you must not resolve yourself. Stages with a bound gate stop at `gated` until a human (or a configured rule) decides; poll status to see the decision.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "The project operation.",
+      "enum": [
+        "init",
+        "list",
+        "status",
+        "advance",
+        "submit"
+      ]
+    },
+    "projectId": {
+      "type": "string",
+      "description": "Target project id; defaults to the project this agent initialized."
+    },
+    "template": {
+      "type": "string",
+      "description": "Template name for init; the default is conveyor-line."
+    },
+    "stageId": {
+      "type": "string",
+      "description": "Stage id for advance/submit."
+    },
+    "text": {
+      "type": "string",
+      "description": "Artifact text for submit."
+    },
+    "vendorSource": {
+      "type": "string",
+      "description": "Optional vendor-dialect source for external compile verifiers such as tia-compile (submit)."
+    },
+    "reference": {
+      "type": "string",
+      "description": "Optional artifact reference, e.g. a trace node id (submit)."
+    }
+  },
+  "required": [
+    "action"
+  ]
+}
+```
+
+Source: [`packages/industrial/tool-ia/src/index.ts`](../packages/industrial/tool-ia/src/index.ts)
+
+### `ia_trace`
+
+Maintain the append-only traceability graph of the current project: record requirement/design/implementation/test/change nodes, link them with typed edges, record change requests, run the three-level change-impact analysis, and read the requirement matrix. Every requirement must end up linked to at least one implementation and one test (the matrix shows the coverage gap). Nodes are never edited — record a change request instead.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "action": {
+      "type": "string",
+      "description": "Which trace operation to run.",
+      "enum": [
+        "record",
+        "link",
+        "change",
+        "impact",
+        "matrix"
+      ]
+    },
+    "kind": {
+      "type": "string",
+      "description": "Trace node kind: requirement | design | implementation | test | change (record).",
+      "enum": [
+        "requirement",
+        "design",
+        "implementation",
+        "test",
+        "change"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "description": "Short node title (record)."
+    },
+    "detail": {
+      "type": "string",
+      "description": "Optional longer description (record)."
+    },
+    "tags": {
+      "type": "array",
+      "description": "Classification tags (record).",
+      "items": {
+        "type": "string"
+      }
+    },
+    "basis": {
+      "type": "string",
+      "description": "Source citation or evidence reference (record)."
+    },
+    "from": {
+      "type": "string",
+      "description": "Source node id (link)."
+    },
+    "to": {
+      "type": "string",
+      "description": "Target node id (link)."
+    },
+    "linkKind": {
+      "type": "string",
+      "description": "Edge kind: derives | implements | verifies | changes (link).",
+      "enum": [
+        "derives",
+        "implements",
+        "verifies",
+        "changes"
+      ]
+    },
+    "nodeIds": {
+      "type": "array",
+      "description": "Changed node ids (change, impact).",
+      "items": {
+        "type": "string"
+      }
+    },
+    "reason": {
+      "type": "string",
+      "description": "Why the change is made (change)."
+    }
+  },
+  "required": [
+    "action"
+  ]
+}
+```
+
+Source: [`packages/industrial/tool-ia/src/index.ts`](../packages/industrial/tool-ia/src/index.ts)
+
+### `ia_verify`
+
+Run one deterministic industrial-automation verifier over an artifact and return its pass/fail report with diagnostics and evidence. Verifiers are the adjudication layer: they are pure, reproducible checks (compiler-style syntax and lint checks, IO-symbol consistency), never model judgments. Use this before claiming any artifact is ready for the next project stage; a failed report must be repaired and re-verified.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "description": "The verifier to run, one of the registered kinds.",
+      "enum": [
+        "st-syntax",
+        "st-lint",
+        "io-consistency"
+      ]
+    },
+    "source": {
+      "type": "string",
+      "description": "The artifact text: Structured Text source for st-syntax/st-lint, TIA SCL source for tia-compile, the IO-symbol JSON document for io-consistency."
+    },
+    "vendorSource": {
+      "type": "string",
+      "description": "Optional vendor-dialect source for external compile validators such as tia-compile; the validator falls back to `source` when omitted."
+    },
+    "fileName": {
+      "type": "string",
+      "description": "Optional file name used only for diagnostic framing."
+    }
+  },
+  "required": [
+    "kind",
+    "source"
+  ]
+}
+```
+
+Source: [`packages/industrial/tool-ia/src/index.ts`](../packages/industrial/tool-ia/src/index.ts)
+
+The five closed-loop tools: verification runs deterministic local validators, gate requests never decide, trace and project state scope to the calling agent, and knowledge records enter pending-review.
 
 <a id="deepseek-aidsh-tool-vision"></a>
 
