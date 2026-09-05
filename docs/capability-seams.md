@@ -195,6 +195,18 @@ flowchart LR
   svc_specLoopAdapter["ctx.specLoopAdapter<br/>Spec-loop software adapter seam"]
   pkg_provider_openness["provider-openness"]
   pkg_tool_spec_loop["tool-spec-loop"]
+  pkg_ia_verifier["ia-verifier"]
+  svc_iaVerifiers["ctx.iaVerifiers<br/>Deterministic verifier registry"]
+  pkg_ia_verifier_openness["ia-verifier-openness"]
+  pkg_ia_orchestrator["ia-orchestrator"]
+  pkg_tool_ia["tool-ia"]
+  pkg_ia_gates["ia-gates"]
+  svc_iaGates["ctx.iaGates<br/>Gate engine"]
+  pkg_ia_trace["ia-trace"]
+  svc_iaTrace["ctx.iaTrace<br/>Traceability graph"]
+  pkg_ia_knowledge["ia-knowledge"]
+  svc_iaKnowledge["ctx.iaKnowledge<br/>Knowledge libraries"]
+  svc_iaOrchestrator["ctx.iaOrchestrator<br/>Project DAG orchestrator"]
   pkg_lsp["lsp"]
   svc_lsp["ctx.lsp<br/>Language-server navigation seam"]
   pkg_lsp_local["lsp-local"]
@@ -241,6 +253,12 @@ flowchart LR
   pkg_fs_local --> svc_fs
   pkg_fs_sandbox --> svc_fs
   pkg_goal --> svc_goals
+  pkg_ia_gates --> svc_iaGates
+  pkg_ia_knowledge --> svc_iaKnowledge
+  pkg_ia_orchestrator --> svc_iaOrchestrator
+  pkg_ia_trace --> svc_iaTrace
+  pkg_ia_verifier --> svc_iaVerifiers
+  pkg_ia_verifier_openness --> svc_iaVerifiers
   pkg_invariants --> svc_invariants
   pkg_jobs --> svc_jobs
   pkg_jobs_local --> svc_jobs
@@ -339,6 +357,13 @@ flowchart LR
   svc_e2b --> pkg_fs_e2b
   svc_e2b --> pkg_subprocess_e2b
   svc_fs --> pkg_tool_fs
+  svc_iaGates --> pkg_ia_orchestrator
+  svc_iaGates --> pkg_tool_ia
+  svc_iaKnowledge --> pkg_tool_ia
+  svc_iaOrchestrator --> pkg_tool_ia
+  svc_iaTrace --> pkg_tool_ia
+  svc_iaVerifiers --> pkg_ia_orchestrator
+  svc_iaVerifiers --> pkg_tool_ia
   svc_invariants --> pkg_agent
   svc_invariants --> pkg_agent_loop
   svc_invariants --> pkg_scope
@@ -490,6 +515,11 @@ flowchart LR
 | `ctx.clientModules` | `core` | `modules` | - | `hmr` | - | Composes the __DSH_BOOT__ entry graph from an incremental dsh.client scan, serves plugin bundles, and notifies rebuilt/graph-changed subscribers. |
 | `ctx.workflowEngine` | `seam` | [`workflow`](../packages/workflow/workflow) | [`workflow-worker-thread`](../packages/workflow/workflow-worker-thread) | [`tool-workflow`](../packages/workflow/tool-workflow), [`tool-ralph`](../packages/workflow/tool-ralph) | - | One engine per context, as in bash, with no named-provider registry; the general workflow and fixed Ralph consumers start runs whose agent() calls fan out through ctx.subagents. |
 | `ctx.specLoopAdapter` | `seam` | [`spec-loop`](../packages/spec-loop/spec-loop) | [`provider-openness`](../packages/spec-loop/provider-openness) | [`tool-spec-loop`](../packages/spec-loop/tool-spec-loop) | - | One adapter per context; the shipped TIA Portal Openness provider (provider-openness) drives an Openness bridge over HTTP JSON, and other integrations stay deployment-owned. Implementations provide validate (the cheap S1 gate) and run (execution with structured outcomes), and the deterministic spec-loop engine classifies each iteration. |
+| `ctx.iaVerifiers` | `core` | [`ia-verifier`](../packages/industrial/ia-verifier) | [`ia-verifier-openness`](../packages/industrial/ia-verifier-openness) | [`ia-orchestrator`](../packages/industrial/ia-orchestrator), [`tool-ia`](../packages/industrial/tool-ia) | - | Named pure checks with built-in Structured Text syntax/lint and IO-symbol consistency validators; the adjudication layer of the industrial closed loop. The openness provider registers the tia-compile kind, which adjudicates control programs through a real TIA Portal compile over the Openness bridge. |
+| `ctx.iaGates` | `core` | [`ia-gates`](../packages/industrial/ia-gates) | - | [`ia-orchestrator`](../packages/industrial/ia-orchestrator), [`tool-ia`](../packages/industrial/tool-ia) | - | Six mandatory human gates, A0–A3 automation levels, and approval-channel decisions; always-human dangerous gates never accept auto-release rules. |
+| `ctx.iaTrace` | `core` | [`ia-trace`](../packages/industrial/ia-trace) | - | [`tool-ia`](../packages/industrial/tool-ia) | - | Append-only nodes, typed links, and change records with the three-level impact analysis and requirement matrices. |
+| `ctx.iaKnowledge` | `core` | [`ia-knowledge`](../packages/industrial/ia-knowledge) | - | [`tool-ia`](../packages/industrial/tool-ia) | - | Standards/templates/cases with mandatory citations, cold-start readiness, and the pending-review learning sink. |
+| `ctx.iaOrchestrator` | `core` | [`ia-orchestrator`](../packages/industrial/ia-orchestrator) | - | [`tool-ia`](../packages/industrial/tool-ia) | - | Conveyor-line stage machine with verify-then-gate transitions, the bounded inner loop, and escalation packages. |
 | `ctx.lsp` | `seam` | [`lsp`](../packages/lsp/lsp) | `lsp-local` | [`tool-lsp`](../packages/lsp/tool-lsp) | - | Provider registration and selection plus normalized query execution over exactly four operations; the seam offers no protocol escape hatch, so a backend translates into the normalized request and result. |
 | `ctx.vision` | `seam` | [`vision`](../packages/vision/vision) | [`vision-openai`](../packages/vision/vision-openai) | [`tool-vision`](../packages/vision/tool-vision) | - | One provider registry per context with execution-time selection that never depends on registration order; the OpenAI-compatible provider implements multimodal chat/completions, and the tool-vision consumer exposes the model-facing understand_image tool. |
 | `ctx.apiProxy` | `core` | `apiproxy` | - | `connection` | - | The transport-agnostic host gateway face: it dispatches browser API calls, and each open host stream subscribes to the events it forwards rather than being pushed to through a broadcast verb. |

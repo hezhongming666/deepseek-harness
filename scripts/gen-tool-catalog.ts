@@ -70,6 +70,12 @@ import * as ToolWorkflow from '@deepseek-ai/dsh-tool-workflow'
 import { SpecLoopAdapterService } from '@deepseek-ai/dsh-spec-loop'
 import type { AdapterRunOutcome, AdapterRunRequest, ValidationOutcome } from '@deepseek-ai/dsh-spec-loop'
 import * as ToolSpecLoop from '@deepseek-ai/dsh-tool-spec-loop'
+import IaVerifiers from '@deepseek-ai/dsh-ia-verifier'
+import IaGatesService from '@deepseek-ai/dsh-ia-gates'
+import IaTraceService from '@deepseek-ai/dsh-ia-trace'
+import IaKnowledgeService from '@deepseek-ai/dsh-ia-knowledge'
+import IaOrchestratorService from '@deepseek-ai/dsh-ia-orchestrator'
+import * as ToolIa from '@deepseek-ai/dsh-tool-ia'
 import VisionRuntime from '@deepseek-ai/dsh-vision'
 import type { VisionProvider, VisionUnderstandRequest, VisionUnderstandResult } from '@deepseek-ai/dsh-vision'
 import * as ToolVision from '@deepseek-ai/dsh-tool-vision'
@@ -482,6 +488,23 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'One call runs the complete deterministic loop over the mounted adapter; the model supplies only the spec contract and an optional starting candidate. Generation goes through the LLM seam with the configured multi-model fallback chain.',
+  },
+  {
+    pkg: '@deepseek-ai/dsh-tool-ia',
+    dir: 'tool-ia',
+    source: 'packages/industrial/tool-ia/src/index.ts',
+    requires: ['ctx.tools', 'ctx.iaVerifiers', 'ctx.iaGates', 'ctx.iaTrace', 'ctx.iaKnowledge', 'ctx.iaOrchestrator'],
+    writes: ['tool/call', 'tool/result', 'gate requests through ctx.iaGates'],
+    async mount(ctx) {
+      await ctx.plugin(IaVerifiers)
+      await ctx.plugin(IaGatesService)
+      await ctx.plugin(IaTraceService)
+      await ctx.plugin(IaKnowledgeService)
+      await ctx.plugin(IaOrchestratorService)
+      await ctx.plugin(ToolIa)
+    },
+    note:
+      'The five closed-loop tools: verification runs deterministic local validators, gate requests never decide, trace and project state scope to the calling agent, and knowledge records enter pending-review.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-vision',

@@ -42,6 +42,7 @@ One page per subsystem of the DeepSeek Harness: what it is, the data structures 
 | [web.md](web.md) | the web access seam: `WebSearchRequest`/`Result`, `WebFetchRequest`/`Result`, `WebFetchBody`, provider availability, `WebError` |
 | [spill.md](spill.md) | the spill storage seam: `SaveTextSpill`, `SpillOwner`/`SpillSource`, `SpillRef`, the branded `SpillLocator` |
 | [spec-loop.md](spec-loop.md) | the spec-loop capability: the `SpecLoopAdapterService` seam vocabulary, the spec contract, failure classification, and monotonic-repair semantics |
+| [industrial.md](industrial.md) | the industrial-automation closed loop: verifier, trace, gate, knowledge, and orchestrator services, their vocabularies, and the structural authority boundary |
 | [vision.md](vision.md) | the vision capability: the `VisionProvider` registry, `VisionUnderstandRequest`/`Result`, execution-time selection, and `VisionError` |
 | [workflow.md](workflow.md) | the workflow seam: `WorkflowStartRequest`, `WorkflowMeta`, `WorkflowRun`/`Result`, the `workflow/*` event payloads, `WorkflowError` fatality |
 | [jobs.md](jobs.md) | the background-job runtime: branded `JobId`s, the producer contract, consumer views, and `ctx.jobs` service behavior |

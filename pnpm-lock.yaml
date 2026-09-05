@@ -520,6 +520,24 @@ importers:
       '@deepseek-ai/dsh-hooks-codex':
         specifier: workspace:*
         version: link:../packages/hooks/hooks-codex
+      '@deepseek-ai/dsh-ia-gates':
+        specifier: workspace:*
+        version: link:../packages/industrial/ia-gates
+      '@deepseek-ai/dsh-ia-knowledge':
+        specifier: workspace:*
+        version: link:../packages/industrial/ia-knowledge
+      '@deepseek-ai/dsh-ia-orchestrator':
+        specifier: workspace:*
+        version: link:../packages/industrial/ia-orchestrator
+      '@deepseek-ai/dsh-ia-trace':
+        specifier: workspace:*
+        version: link:../packages/industrial/ia-trace
+      '@deepseek-ai/dsh-ia-verifier':
+        specifier: workspace:*
+        version: link:../packages/industrial/ia-verifier
+      '@deepseek-ai/dsh-ia-verifier-openness':
+        specifier: workspace:*
+        version: link:../packages/industrial/ia-verifier-openness
       '@deepseek-ai/dsh-invariants':
         specifier: workspace:*
         version: link:../packages/runtime-diagnostics/invariants
@@ -691,6 +709,9 @@ importers:
       '@deepseek-ai/dsh-tool-goal':
         specifier: workspace:*
         version: link:../packages/goal/tool-goal
+      '@deepseek-ai/dsh-tool-ia':
+        specifier: workspace:*
+        version: link:../packages/industrial/tool-ia
       '@deepseek-ai/dsh-tool-jobs':
         specifier: workspace:*
         version: link:../packages/jobs/tool-jobs
@@ -1278,6 +1299,34 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
+
+  packages/bundle/ia:
+    dependencies:
+      '@deepseek-ai/dsh-ia-gates':
+        specifier: workspace:^
+        version: link:../../industrial/ia-gates
+      '@deepseek-ai/dsh-ia-knowledge':
+        specifier: workspace:^
+        version: link:../../industrial/ia-knowledge
+      '@deepseek-ai/dsh-ia-orchestrator':
+        specifier: workspace:^
+        version: link:../../industrial/ia-orchestrator
+      '@deepseek-ai/dsh-ia-trace':
+        specifier: workspace:^
+        version: link:../../industrial/ia-trace
+      '@deepseek-ai/dsh-ia-verifier':
+        specifier: workspace:^
+        version: link:../../industrial/ia-verifier
+      '@deepseek-ai/dsh-tool-ia':
+        specifier: workspace:^
+        version: link:../../industrial/tool-ia
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
 
   packages/bundle/web-app:
     dependencies:
@@ -5212,6 +5261,160 @@ importers:
       '@deepseek-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
+
+  packages/industrial/ia-gates:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:^
+        version: link:../../util/brand
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-user-approval':
+        specifier: workspace:^
+        version: link:../../interaction/user-approval
+
+  packages/industrial/ia-knowledge:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:^
+        version: link:../../util/brand
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+
+  packages/industrial/ia-orchestrator:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:^
+        version: link:../../util/brand
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-ia-gates':
+        specifier: workspace:^
+        version: link:../ia-gates
+      '@deepseek-ai/dsh-ia-verifier':
+        specifier: workspace:^
+        version: link:../ia-verifier
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+
+  packages/industrial/ia-trace:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:^
+        version: link:../../util/brand
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+
+  packages/industrial/ia-verifier:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+
+  packages/industrial/ia-verifier-openness:
+    dependencies:
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/dsh-ia-verifier':
+        specifier: workspace:^
+        version: link:../ia-verifier
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+
+  packages/industrial/tool-ia:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:^
+        version: link:../../util/brand
+      '@deepseek-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@deepseek-ai/cordis-plugin-include':
+        specifier: workspace:^
+        version: link:../../../vendor/include
+      '@deepseek-ai/cordis-plugin-loader':
+        specifier: workspace:^
+        version: link:../../../vendor/loader
+      '@deepseek-ai/dsh-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
+      '@deepseek-ai/dsh-ia-gates':
+        specifier: workspace:^
+        version: link:../ia-gates
+      '@deepseek-ai/dsh-ia-knowledge':
+        specifier: workspace:^
+        version: link:../ia-knowledge
+      '@deepseek-ai/dsh-ia-orchestrator':
+        specifier: workspace:^
+        version: link:../ia-orchestrator
+      '@deepseek-ai/dsh-ia-trace':
+        specifier: workspace:^
+        version: link:../ia-trace
+      '@deepseek-ai/dsh-ia-verifier':
+        specifier: workspace:^
+        version: link:../ia-verifier
+      '@deepseek-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@deepseek-ai/dsh-llm':
+        specifier: workspace:^
+        version: link:../../llm/llm
+      '@deepseek-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
+      '@deepseek-ai/dsh-system-prompt':
+        specifier: workspace:^
+        version: link:../../core/system-prompt
+      '@deepseek-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
 
   packages/interaction/commands:
     dependencies:

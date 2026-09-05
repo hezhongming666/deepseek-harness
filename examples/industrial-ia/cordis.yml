@@ -1,0 +1,33 @@
+# Opt-in industrial-automation overlay over the shipped Web composition.
+# Mounts the closed-loop capability family: deterministic verifiers, the gate
+# engine (A1: every release human-decided), the traceability graph, the
+# knowledge libraries, the conveyor-line orchestrator, and the model-facing
+# tools. Run with:
+#   dsh web --patch examples/industrial-ia/cordis.yml
+# Automation level, knowledge minima, and tool enablement are deployment
+# choices restated here; the bundle packages/bundle/ia ships the same rows.
+
+- insert:
+    - id: ia-verifier
+      name: '@deepseek-ai/dsh-ia-verifier'
+
+    - id: ia-gates
+      name: '@deepseek-ai/dsh-ia-gates'
+      config:
+        level: A1
+
+    - id: ia-trace
+      name: '@deepseek-ai/dsh-ia-trace'
+
+    - id: ia-knowledge
+      name: '@deepseek-ai/dsh-ia-knowledge'
+      config:
+        minTemplates: 20
+        minCases: 30
+        maxSearchResults: 10
+
+    - id: ia-orchestrator
+      name: '@deepseek-ai/dsh-ia-orchestrator'
+
+    - id: tool-ia
+      name: '@deepseek-ai/dsh-tool-ia'

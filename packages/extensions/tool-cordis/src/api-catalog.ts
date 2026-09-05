@@ -808,6 +808,238 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'iaGates',
+    summary: 'The gate engine.',
+    description: 'The gate engine. Requests are append-only records; decisions enter through IaGatesService.requestHumanDecision (the approval channel) or a registered auto-release rule evaluated at level A2/A3.',
+    methods: [
+      {
+        signature: 'automationLevel(): AutomationLevel',
+        description: 'Read the deployment automation level.',
+        parameters: [],
+        returns: 'the deployment automation level.',
+      },
+      {
+        signature: 'registerGate(definition: GateRegistration): () => void',
+        description: 'Register one project-specific gate. Mandatory gate ids are reserved and cannot be re-registered.',
+        parameters: [{ name: 'definition', description: 'the gate definition; `mandatory` is forced to false.' }],
+        returns: 'a disposer removing the gate.',
+      },
+      {
+        signature: 'registerAutoReleaseRule(id: string, gateId: GateId, rule: AutoReleaseRule): () => void',
+        description: 'Register one auto-release rule. Rules apply only at automation level A2 or A3, and never to always-human gates.',
+        parameters: [{ name: 'id', description: 'the rule id, used as the decision\'s decider label.' }, { name: 'gateId', description: 'the target gate.' }, { name: 'rule', description: 'the deterministic predicate over the request context.' }],
+        returns: 'a disposer removing the rule.',
+      },
+      {
+        signature: 'gatesList(): GateDefinition[]',
+        description: 'List every registered gate.',
+        parameters: [],
+        returns: 'all registered gates, mandatory first.',
+      },
+      {
+        signature: 'requests(): GateRequest[]',
+        description: 'List every recorded request.',
+        parameters: [],
+        returns: 'all requests across gates, in recording order.',
+      },
+      {
+        signature: 'requestsFor(gateId: GateId): GateRequest[]',
+        description: 'Read the requests recorded for one gate.',
+        parameters: [{ name: 'gateId', description: 'the gate whose requests to read.' }],
+        returns: 'the requests recorded for the gate, oldest first.',
+      },
+      {
+        signature: 'request(gateId: GateId, requestedBy: string, context: GateRequestContext): GateRequest',
+        description: 'Ask one gate to release. At level A2/A3 a registered auto-release rule decides immediately; otherwise the request stays pending for the human channel.',
+        parameters: [{ name: 'gateId', description: 'the gate to ask.' }, { name: 'requestedBy', description: 'the asking agent or human identity.' }, { name: 'context', description: 'the decision context.' }],
+        returns: 'the recorded request, possibly already decided.',
+      },
+      {
+        signature: 'async requestHumanDecision(gateId: GateId, agent: Agent): Promise<HumanDecisionOutcome>',
+        description: 'Ask the composed approval channel for a human decision on the latest pending request of one gate. The service itself never prompts anyone — the approval seam does — and any answer that is not a grant leaves the request pending.',
+        parameters: [{ name: 'gateId', description: 'the gate to decide.' }, { name: 'agent', description: 'the agent on whose behalf the question is asked.' }],
+        returns: 'what happened: `approved`, `rejected`, or `pending` when the channel is absent, unavailable, cancelled, or has no pending request.',
+      },
+      {
+        signature: 'latestDecision(gateId: GateId): GateDecision | undefined',
+        description: 'Read the latest decision recorded for one gate.',
+        parameters: [{ name: 'gateId', description: 'the gate whose decision to read.' }],
+        returns: 'the latest decision, or `undefined` when none exists.',
+      },
+      {
+        signature: 'onMutate(listener: () => void): void',
+        description: 'Subscribe to post-mutation notifications; the registration lives as long as the service.',
+        parameters: [{ name: 'listener', description: 'called after every committed mutation.' }],
+      },
+    ],
+  },
+  {
+    key: 'iaKnowledge',
+    summary: 'The knowledge service.',
+    description: 'The knowledge service. Entries are append-only records keyed per library; duplicate title+content records are rejected so the learning pipeline cannot pollute a library twice.',
+    methods: [
+      {
+        signature: 'record(input: RecordEntryInput): KnowledgeEntry',
+        description: 'Record one entry. Duplicate title+content pairs in one library are rejected, and citations are mandatory — the design\'s evidence rule.',
+        parameters: [{ name: 'input', description: 'the entry to record.' }],
+        returns: 'the recorded entry.',
+      },
+      {
+        signature: 'approveEntry(id: KnowledgeEntryId): KnowledgeEntry',
+        description: 'Approve one pending entry — the human quality-gate path (§6.2 抽检).',
+        parameters: [{ name: 'id', description: 'the entry to approve.' }],
+        returns: 'the updated entry.',
+        throws: ['when the id is unknown or the entry is already approved.'],
+      },
+      {
+        signature: 'entriesList(library: LibraryKind): KnowledgeEntry[]',
+        description: 'List the entries of one library.',
+        parameters: [{ name: 'library', description: 'the library to list.' }],
+        returns: 'all entries of the library, in recording order.',
+      },
+      {
+        signature: 'libraries(): LibraryKind[]',
+        description: 'List the closed library kinds.',
+        parameters: [],
+        returns: 'the three library kinds, in canonical order.',
+      },
+      {
+        signature: 'search(library: LibraryKind, query: string): SearchResult',
+        description: 'Deterministic keyword retrieval over one library: every query term must match somewhere in the entry, hits are ranked by total match count and capped at the configured maximum.',
+        parameters: [{ name: 'library', description: 'the library to search.' }, { name: 'query', description: 'whitespace-separated search terms.' }],
+        returns: 'the bounded hits plus the cold-start degradation flag.',
+      },
+      {
+        signature: 'readiness(): Readiness',
+        description: 'Snapshot the cold-start readiness.',
+        parameters: [],
+        returns: 'the cold-start readiness snapshot (§6.2 minimum scales).',
+      },
+      {
+        signature: 'onMutate(listener: () => void): void',
+        description: 'Subscribe to post-mutation notifications; the registration lives as long as the service.',
+        parameters: [{ name: 'listener', description: 'called after every committed mutation.' }],
+      },
+    ],
+  },
+  {
+    key: 'iaOrchestrator',
+    summary: 'The project orchestrator.',
+    description: 'The project orchestrator. Projects are isolated by id; the service owns no approval authority — gate decisions are read back from the gate engine.',
+    methods: [
+      {
+        signature: 'templatesList(): string[]',
+        description: 'List the registered template names.',
+        parameters: [],
+        returns: 'the registered template names.',
+      },
+      {
+        signature: 'initProject(projectId?: ProjectId, templateName: string = this.defaultTemplate): ProjectSnapshot',
+        description: 'Instantiate one project from a template. Every stage starts `pending` except the first, which starts `running`.',
+        parameters: [{ name: 'projectId', description: 'explicit project id, or a service-issued one.' }, { name: 'templateName', description: 'the template to instantiate (default: configured).' }],
+        returns: 'the project snapshot.',
+      },
+      {
+        signature: 'project(projectId: ProjectId): ProjectSnapshot',
+        description: 'Read one project snapshot, syncing bound gate decisions first: an approved gate passes a `gated` stage, a rejected gate sends it back to `running` for rework.',
+        parameters: [{ name: 'projectId', description: 'the project to read.' }],
+        returns: 'the current snapshot.',
+      },
+      {
+        signature: 'projectsList(): ProjectSnapshot[]',
+        description: 'List every instantiated project.',
+        parameters: [],
+        returns: 'all instantiated projects, snapshotted with synced gate decisions.',
+      },
+      {
+        signature: 'advance(projectId: ProjectId, stageId: StageId): ProjectSnapshot',
+        description: 'Start a `pending` stage; every predecessor stage must have passed.',
+        parameters: [{ name: 'projectId', description: 'the owning project.' }, { name: 'stageId', description: 'the stage to start.' }],
+        returns: 'the updated project snapshot.',
+      },
+      {
+        signature: 'async submit(projectId: ProjectId, stageId: StageId, submission: Submission): Promise<StageSnapshot>',
+        description: 'Submit one artifact into a `running` or `repair` stage: run the bound verifiers, then request the bound gate on success, retry on failure within the budget, and escalate when the budget is exhausted.',
+        parameters: [{ name: 'projectId', description: 'the owning project.' }, { name: 'stageId', description: 'the receiving stage.' }, { name: 'submission', description: 'the artifact text, optional vendor-dialect source, and submitter identity.' }],
+        returns: 'the updated stage snapshot.',
+      },
+      {
+        signature: 'resolveEscalation(projectId: ProjectId, stageId: StageId, instruction: string): StageSnapshot',
+        description: 'Resolve one escalated stage with a human instruction: the stage returns to `running` with a fresh inner-loop budget and the instruction attached for the agent to read. This is a supervisor path — no model-facing tool exposes it.',
+        parameters: [{ name: 'projectId', description: 'the owning project.' }, { name: 'stageId', description: 'the escalated stage.' }, { name: 'instruction', description: 'what the supervisor asks the agent to do.' }],
+        returns: 'the updated stage snapshot.',
+      },
+      {
+        signature: 'onMutate(listener: () => void): void',
+        description: 'Subscribe to post-mutation notifications; the registration lives as long as the service.',
+        parameters: [{ name: 'listener', description: 'called after every committed mutation.' }],
+      },
+    ],
+  },
+  {
+    key: 'iaTrace',
+    summary: 'The traceability service.',
+    description: 'The traceability service. It owns no project state itself — callers open per-scope projects through IaTraceService.project — but keeps the scoped projects alive until the service disposes.',
+    methods: [
+      {
+        signature: 'project(scope: string): TraceProject',
+        description: 'Open (or reuse) the project isolated under one scope key.',
+        parameters: [{ name: 'scope', description: 'the caller-chosen isolation key, e.g. the agent\'s session id.' }],
+        returns: 'the scoped project.',
+      },
+      {
+        signature: 'onProjectOpen(listener: (project: TraceProject) => void): void',
+        description: 'Subscribe to first-open notifications; the registration lives as long as the service (used by the invariant companion to attach validation).',
+        parameters: [{ name: 'listener', description: 'called once per newly opened project, after it commits.' }],
+      },
+      {
+        signature: 'hasProject(scope: string): boolean',
+        description: 'Check whether one scope key has a project.',
+        parameters: [{ name: 'scope', description: 'the isolation key to check.' }],
+        returns: 'whether the scope key already has a project.',
+      },
+    ],
+  },
+  {
+    key: 'iaVerifiers',
+    summary: 'The named deterministic-validator registry.',
+    description: 'The named deterministic-validator registry. Extension providers register additional kinds (e.g. a vendor compile adapter); gate and orchestrator consumers read reports through IaVerifiers.verify.',
+    methods: [
+      {
+        signature: 'register(descriptor: ValidatorDescriptor): () => void',
+        description: 'Register one named validator. Registration is an effect: the returned disposer removes the kind again.',
+        parameters: [{ name: 'descriptor', description: 'the validator to register.' }],
+        returns: 'a disposer removing the registration.',
+      },
+      {
+        signature: 'kinds(): string[]',
+        description: 'List the registered validator kinds.',
+        parameters: [],
+        returns: 'the registered validator kinds, in registration order.',
+      },
+      {
+        signature: 'get(kind: string): ValidatorDescriptor | undefined',
+        description: 'Read one registered validator descriptor.',
+        parameters: [{ name: 'kind', description: 'the validator kind.' }],
+        returns: 'the descriptor, or `undefined` when the kind is unregistered.',
+      },
+      {
+        signature: 'async verify(kind: string, input: VerificationInput): Promise<VerificationReport>',
+        description: 'Run one deterministic verification.',
+        parameters: [{ name: 'kind', description: 'the registered validator kind.' }, { name: 'input', description: 'the checked text or JSON payload.' }],
+        returns: 'the verification report, awaited when the validator round-trips an external tool.',
+        throws: ['{@link UnknownVerifierError} when the kind is unregistered — the design\'s fail-loud rule: verification never silently skips.'],
+      },
+      {
+        signature: 'async verifyAll(kinds: readonly string[], input: VerificationInput): Promise<VerificationReport[]>',
+        description: 'Run several verifications over one input in the given order.',
+        parameters: [{ name: 'kinds', description: 'the validator kinds to run.' }, { name: 'input', description: 'the checked text or JSON payload.' }],
+        returns: 'one report per kind, in the requested order.',
+        throws: ['{@link UnknownVerifierError} on the first unregistered kind.'],
+      },
+    ],
+  },
+  {
     key: 'invariants',
     summary: 'Package-owned invariant registry with global and regex-based selection.',
     description: 'Package-owned invariant registry with global and regex-based selection.',
@@ -2779,6 +3011,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type AdapterRunStatus = \'success\' | \'diverged\' | \'infrastructure\' | \'killed\';',
   },
   {
+    name: 'AddNodeInput',
+    declaration: 'export interface AddNodeInput {\n    kind: TraceNodeKind;\n    title: string;\n    detail?: string;\n    tags?: string[];\n    author: string;\n    basis?: string;\n}',
+  },
+  {
     name: 'Agent',
     declaration: 'export interface Agent {\n    readonly id: SessionId;\n    readonly options: AgentOptions;\n    readonly session: Session;\n    readonly inbox: Inbox;\n    readonly status: AgentStatus;\n    readonly ctx: Context;\n    cancel(cause: AgentCancelCause, options?: CancelOptions): void;\n    whenIdle(): Promise<void>;\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n    send(message: UserMessage, target: InboxTarget, wakeup: boolean): void;\n    followup(message: UserMessage): void;\n    steer(message: UserMessage): void;\n    inject(message: UserMessage): void;\n}',
   },
@@ -2879,6 +3115,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type AttachmentId = Branded<\'AttachmentId\'>;',
   },
   {
+    name: 'AutomationLevel',
+    declaration: 'export type AutomationLevel = \'A0\' | \'A1\' | \'A2\' | \'A3\';',
+  },
+  {
+    name: 'AutoReleaseRule',
+    declaration: 'export type AutoReleaseRule = (context: GateRequestContext) => boolean;',
+  },
+  {
     name: 'BackendRegistry',
     declaration: 'export class BackendRegistry {\n    register(name: string, backend: StorageBackend): () => void;\n    get(name: string): StorageBackend;\n    names(): string[];\n}',
   },
@@ -2901,6 +3145,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'CancelOptions',
     declaration: 'export interface CancelOptions {\n    keepInbox?: boolean | undefined;\n}',
+  },
+  {
+    name: 'ChangeRecord',
+    declaration: 'export interface ChangeRecord {\n    nodeIds: TraceNodeId[];\n    author: string;\n    reason: string;\n    recordedAt: number;\n}',
   },
   {
     name: 'ClientResponse',
@@ -3091,6 +3339,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type CredentialRef = Branded<\'CredentialRef\'>;',
   },
   {
+    name: 'Diagnostic',
+    declaration: 'export interface Diagnostic {\n    code: string;\n    message: string;\n    severity: \'error\' | \'warning\';\n    position?: SourcePosition;\n    excerpt?: string;\n}',
+  },
+  {
     name: 'DiffCallView',
     declaration: 'export interface DiffCallView {\n    card: \'diff\';\n    title: string;\n    diffs: FileDiff[];\n    locations?: FileLocation[];\n}',
   },
@@ -3203,6 +3455,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface EpochHeader {\n    config: LlmCallConfig;\n    adapterDefaults?: LlmCallConfigAdapterDefaults;\n    system?: string;\n    tools?: ToolSchema[];\n}',
   },
   {
+    name: 'EscalationPackage',
+    declaration: 'export interface EscalationPackage {\n    stageId: StageId;\n    reason: string;\n    context: string;\n    artifact: string;\n    reports: VerificationReport[];\n    failureSummary: string;\n    options: string[];\n}',
+  },
+  {
+    name: 'EvidenceItem',
+    declaration: 'export interface EvidenceItem {\n    kind: string;\n    summary: string;\n    detail?: string;\n}',
+  },
+  {
     name: 'FileDiff',
     declaration: 'export interface FileDiff {\n    path: string;\n    oldText: string | null;\n    newText: string;\n}',
   },
@@ -3267,6 +3527,30 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface FsWriteOutcome {\n    operation: \'create\' | \'update\';\n    version: FsVersion;\n    before: string | null;\n    after: string;\n}',
   },
   {
+    name: 'GateDecision',
+    declaration: 'export interface GateDecision {\n    outcome: \'approved\' | \'rejected\';\n    decider: string;\n    rationale: string;\n    decidedAt: number;\n}',
+  },
+  {
+    name: 'GateDefinition',
+    declaration: 'export interface GateDefinition {\n    id: GateId;\n    title: string;\n    description: string;\n    mandatory: boolean;\n    alwaysHuman: boolean;\n}',
+  },
+  {
+    name: 'GateId',
+    declaration: 'export type GateId = Branded<\'GateId\'>;',
+  },
+  {
+    name: 'GateRegistration',
+    declaration: 'export type GateRegistration = Omit<GateDefinition, \'mandatory\'>;',
+  },
+  {
+    name: 'GateRequest',
+    declaration: 'export interface GateRequest {\n    id: number;\n    gateId: GateId;\n    requestedBy: string;\n    context: GateRequestContext;\n    requestedAt: number;\n    decision?: GateDecision;\n}',
+  },
+  {
+    name: 'GateRequestContext',
+    declaration: 'export interface GateRequestContext {\n    reason: string;\n    evidence: string[];\n    context?: string;\n}',
+  },
+  {
     name: 'GenerateOptions',
     declaration: 'export interface GenerateOptions {\n    provider: string;\n    model: string;\n    reasoningEffort?: ReasoningEffortId;\n    messages: Message[];\n    system?: string;\n    tools?: ToolSchema[];\n    temperature?: number;\n    maxTokens?: number;\n    stop?: string[];\n    signal?: AbortSignal;\n    sessionId?: Branded<\'SessionId\'>;\n    purpose?: \'compaction\' | \'session-title\';\n}',
   },
@@ -3307,6 +3591,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface GoalView extends GoalSnapshot {\n    readonly roundsStarted: number;\n    readonly createdAt: number;\n    readonly updatedAt: number;\n    readonly activation: GoalActivation;\n}',
   },
   {
+    name: 'HumanDecisionOutcome',
+    declaration: 'export type HumanDecisionOutcome = \'approved\' | \'rejected\' | \'pending\';',
+  },
+  {
     name: 'ImageAttachmentLimits',
     declaration: 'export interface ImageAttachmentLimits {\n    maxImageBytes: number;\n    maxImagesPerMessage: number;\n    maxMessageImageBytes: number;\n    maxImagePixels: number;\n    maxImageDimension: number;\n    mediaTypes: readonly ImageMediaType[];\n}',
   },
@@ -3321,6 +3609,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ImageMediaType',
     declaration: 'export type ImageMediaType = \'image/png\' | \'image/jpeg\' | \'image/webp\' | \'image/gif\';',
+  },
+  {
+    name: 'ImpactAnalysis',
+    declaration: 'export interface ImpactAnalysis {\n    changed: TraceNodeId[];\n    direct: TraceNodeId[];\n    indirect: TraceNodeId[];\n    potential: TraceNodeId[];\n}',
   },
   {
     name: 'Inbox',
@@ -3423,6 +3715,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface KnobState {\n    preset: string | null;\n    sandbox: SandboxMode | null;\n    approval: ApprovalPolicy | null;\n}',
   },
   {
+    name: 'KnowledgeEntry',
+    declaration: 'export interface KnowledgeEntry {\n    id: KnowledgeEntryId;\n    library: LibraryKind;\n    title: string;\n    content: string;\n    tags: string[];\n    source: string;\n    version: string;\n    reviewStatus: ReviewStatus;\n    recordedBy: string;\n    recordedAt: number;\n}',
+  },
+  {
+    name: 'KnowledgeEntryId',
+    declaration: 'export type KnowledgeEntryId = Branded<\'KnowledgeEntryId\'>;',
+  },
+  {
     name: 'KvFacet',
     declaration: 'export interface KvFacet {\n    open(descriptor: KvUnitDescriptor): Promise<KvUnit>;\n}',
   },
@@ -3437,6 +3737,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'KvUnitDescriptor',
     declaration: 'export interface KvUnitDescriptor {\n    readonly name: string;\n    readonly version: number;\n    readonly tables: readonly string[];\n    readonly hasGlobal: boolean;\n}',
+  },
+  {
+    name: 'LibraryGap',
+    declaration: 'export interface LibraryGap {\n    library: LibraryKind;\n    have: number;\n    need: number;\n}',
+  },
+  {
+    name: 'LibraryKind',
+    declaration: 'export type LibraryKind = \'standards\' | \'templates\' | \'cases\';',
   },
   {
     name: 'LlmAdapter',
@@ -3537,6 +3845,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ManualCompactAgentContext',
     declaration: 'export interface ManualCompactAgentContext extends CompactionAgentContext {\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n}',
+  },
+  {
+    name: 'MatrixRow',
+    declaration: 'export interface MatrixRow {\n    requirement: TraceNode;\n    implementations: TraceNode[];\n    tests: TraceNode[];\n    covered: boolean;\n}',
   },
   {
     name: 'Message',
@@ -3691,6 +4003,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type PreToolDecision = {\n    kind: \'allow\';\n} | {\n    kind: \'deny\';\n    reason: string;\n} | {\n    kind: \'ask\';\n    reason?: string;\n};',
   },
   {
+    name: 'ProjectId',
+    declaration: 'export type ProjectId = Branded<\'ProjectId\'>;',
+  },
+  {
     name: 'ProjectionChangeListener',
     declaration: 'export type ProjectionChangeListener = (session: Session, key: Extract<keyof SessionProjectionMap, string>, value: unknown, seq: number) => void;',
   },
@@ -3709,6 +4025,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ProjectionSnapshot',
     declaration: 'export interface ProjectionSnapshot {\n    asOfSeq: number;\n    values: Partial<SessionProjectionMap>;\n}',
+  },
+  {
+    name: 'ProjectSnapshot',
+    declaration: 'export interface ProjectSnapshot {\n    id: ProjectId;\n    template: string;\n    stages: StageSnapshot[];\n    requestedGates: GateId[];\n    instructions: {\n        stageId: StageId;\n        instruction: string;\n    }[];\n}',
   },
   {
     name: 'PromptAssembly',
@@ -3739,6 +4059,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ReadFileLine {\n    number: number;\n    text: string;\n}',
   },
   {
+    name: 'Readiness',
+    declaration: 'export interface Readiness {\n    ready: boolean;\n    counts: Record<LibraryKind, number>;\n    gaps: LibraryGap[];\n}',
+  },
+  {
     name: 'ReadResultView',
     declaration: 'export interface ReadResultView {\n    card: \'read\';\n    title?: string;\n    path: string;\n    offset: number;\n    lines: ReadFileLine[];\n    totalLines: number;\n    lang?: string;\n    content?: ContentBlock[];\n}',
   },
@@ -3749,6 +4073,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ReasoningEffortId',
     declaration: 'export type ReasoningEffortId = Branded<\'ReasoningEffortId\'>;',
+  },
+  {
+    name: 'RecordChangeInput',
+    declaration: 'export interface RecordChangeInput {\n    nodeIds: TraceNodeId[];\n    author: string;\n    reason: string;\n}',
+  },
+  {
+    name: 'RecordEntryInput',
+    declaration: 'export interface RecordEntryInput {\n    library: LibraryKind;\n    title: string;\n    content: string;\n    tags?: string[];\n    source: string;\n    version: string;\n    recordedBy: string;\n    reviewStatus: ReviewStatus;\n}',
   },
   {
     name: 'RedactedSecret',
@@ -3805,6 +4137,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ResumeAgentOptions',
     declaration: 'export interface ResumeAgentOptions {\n    readonly resumeSessionId: SessionId;\n    readonly agentOptions?: AgentOptions;\n    readonly signal?: AbortSignal;\n    readonly setup?: AgentSetup;\n}',
+  },
+  {
+    name: 'ReviewStatus',
+    declaration: 'export type ReviewStatus = \'pending-review\' | \'approved\';',
   },
   {
     name: 'RpcError',
@@ -3883,6 +4219,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SearchFileMatches {\n    path: string;\n    matches: SearchLineMatch[];\n}',
   },
   {
+    name: 'SearchHit',
+    declaration: 'export interface SearchHit {\n    entry: KnowledgeEntry;\n    matchedTerms: string[];\n}',
+  },
+  {
     name: 'SearchLineMatch',
     declaration: 'export interface SearchLineMatch {\n    lineNumber: number;\n    line: string;\n}',
   },
@@ -3893,6 +4233,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SearchPathsResultView',
     declaration: 'export interface SearchPathsResultView {\n    card: \'search\';\n    shape: \'paths\';\n    title?: string;\n    paths: string[];\n    truncated: boolean;\n    total: number;\n}',
+  },
+  {
+    name: 'SearchResult',
+    declaration: 'export interface SearchResult {\n    hits: SearchHit[];\n    degraded: boolean;\n}',
   },
   {
     name: 'SearchResultView',
@@ -4255,6 +4599,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SkillViewOptions extends SkillLookupOptions {\n    readonly scope?: ScopeKey | undefined;\n}',
   },
   {
+    name: 'SourcePosition',
+    declaration: 'export interface SourcePosition {\n    line: number;\n    column: number;\n}',
+  },
+  {
     name: 'SpawnTeammateRequest',
     declaration: 'export interface SpawnTeammateRequest {\n    readonly name: string;\n    readonly description: string;\n    readonly prompt: ContentBlock[];\n    readonly context: \'fresh\' | \'fork\';\n    readonly provider: string;\n    readonly signal: AbortSignal;\n}',
   },
@@ -4289,6 +4637,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SpillSource',
     declaration: 'export interface SpillSource {\n    toolName: string;\n    callId: CallId;\n    label: string;\n}',
+  },
+  {
+    name: 'StageId',
+    declaration: 'export type StageId = Branded<\'StageId\'>;',
+  },
+  {
+    name: 'StageSnapshot',
+    declaration: 'export interface StageSnapshot {\n    id: StageId;\n    title: string;\n    state: StageState;\n    attempts: number;\n    maxRetries: number;\n    verifiers: string[];\n    gate?: GateId;\n    reports?: VerificationReport[];\n    gateStatus?: \'none\' | \'pending\' | \'approved\' | \'rejected\';\n    escalation?: EscalationPackage;\n    instruction?: string;\n}',
+  },
+  {
+    name: 'StageState',
+    declaration: 'export type StageState = \'pending\' | \'running\' | \'repair\' | \'gated\' | \'escalated\' | \'passed\';',
   },
   {
     name: 'StorageBackend',
@@ -4373,6 +4733,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SubagentStopReasonMap',
     declaration: 'export interface SubagentStopReasonMap {\n    completed: \'completed\';\n    aborted: \'aborted\';\n    error: \'error\';\n    \'max-tokens\': \'max-tokens\';\n    refusal: \'refusal\';\n}',
+  },
+  {
+    name: 'Submission',
+    declaration: 'export interface Submission {\n    text: string;\n    vendorSource?: string;\n    reference?: string;\n    submittedBy: string;\n}',
   },
   {
     name: 'SubprocessCollect',
@@ -4699,6 +5063,30 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ToolSchema {\n    name: string;\n    description: string;\n    parameters: Record<string, unknown>;\n}',
   },
   {
+    name: 'TraceLink',
+    declaration: 'export interface TraceLink {\n    from: TraceNodeId;\n    to: TraceNodeId;\n    kind: TraceLinkKind;\n}',
+  },
+  {
+    name: 'TraceLinkKind',
+    declaration: 'export type TraceLinkKind = \'derives\' | \'implements\' | \'verifies\' | \'changes\';',
+  },
+  {
+    name: 'TraceNode',
+    declaration: 'export interface TraceNode {\n    id: TraceNodeId;\n    kind: TraceNodeKind;\n    title: string;\n    detail?: string;\n    tags: string[];\n    author: string;\n    basis?: string;\n    createdAt: number;\n    changeVersion: number;\n}',
+  },
+  {
+    name: 'TraceNodeId',
+    declaration: 'export type TraceNodeId = Branded<\'TraceNodeId\'>;',
+  },
+  {
+    name: 'TraceNodeKind',
+    declaration: 'export type TraceNodeKind = \'requirement\' | \'design\' | \'implementation\' | \'test\' | \'change\';',
+  },
+  {
+    name: 'TraceProject',
+    declaration: 'export class TraceProject {\n    addNode(input: AddNodeInput): TraceNode;\n    addLink(from: TraceNodeId, to: TraceNodeId, kind: TraceLinkKind): TraceLink;\n    recordChange(input: RecordChangeInput): {\n        record: ChangeRecord;\n        impact: ImpactAnalysis;\n    };\n    nodesList(): TraceNode[];\n    linksList(): TraceLink[];\n    changesList(): ChangeRecord[];\n    node(id: TraceNodeId): TraceNode | undefined;\n    impactOf(nodeIds: readonly TraceNodeId[]): ImpactAnalysis;\n    matrix(): MatrixRow[];\n    onMutate(listener: (project: TraceProject) => void): () => void;\n}',
+  },
+  {
     name: 'TurnEndCancelCause',
     declaration: 'export type TurnEndCancelCause = AgentCancelCause | {\n    readonly kind: \'legacy\';\n};',
   },
@@ -4785,6 +5173,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ValidationOutcome',
     declaration: 'export interface ValidationOutcome {\n    ok: boolean;\n    reasons: string[];\n}',
+  },
+  {
+    name: 'ValidatorDescriptor',
+    declaration: 'export interface ValidatorDescriptor {\n    kind: string;\n    title: string;\n    description: string;\n    verify(input: VerificationInput): Promise<VerificationReport>;\n}',
+  },
+  {
+    name: 'VerificationInput',
+    declaration: 'export interface VerificationInput {\n    text: string;\n    vendorSource?: string;\n    fileName?: string;\n}',
+  },
+  {
+    name: 'VerificationReport',
+    declaration: 'export interface VerificationReport {\n    kind: string;\n    pass: boolean;\n    diagnostics: Diagnostic[];\n    evidence: EvidenceItem[];\n}',
   },
   {
     name: 'VisionProvider',
