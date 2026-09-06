@@ -4,6 +4,12 @@ English | [中文](README.zh.md)
 
 The append-only traceability graph of the engineering loop: requirement/design/implementation/test/change nodes, typed directed edges, change records, and the three-level change-impact analysis from the architecture §4.4. Projects are isolated by a caller-chosen scope key — the tool consumer uses the agent's session id, so cross-project leakage is impossible by construction (§3.10).
 
+## Configuration
+
+| key | meaning |
+|---|---|
+| `dataDir` | Directory the trace graphs persist to; default empty = in-memory only. Non-empty restores every scoped project from `<dataDir>/ia-trace.json` at load and snapshots after every mutation. |
+
 ## Service API
 
 `ctx.iaTrace`:
@@ -23,6 +29,10 @@ The append-only traceability graph of the engineering loop: requirement/design/i
 
 Nodes, links, and change records are added only — supersession happens through new change records, never edits. The invariant companion proves after every committed mutation that links reference existing nodes and every node's `changeVersion` equals its change-record count.
 
+## Persistence
+
+With `dataDir` configured, every committed mutation — `addNode`, `addLink`, `recordChange` — writes one atomic versioned snapshot (`ia-trace.json`) covering all scoped projects; a fresh boot restores every project with its nodes, links, change records, timestamps, and issuing ordinal. A corrupt or wrong-version snapshot fails at load, and a failed snapshot write throws while the in-memory commit stands (the disk may lag memory until the next successful save).
+
 ## Model Experience
 
 Indirectly, through dsh-tool-ia's `ia_trace` tool, which is the only model-facing surface that renders this graph.
@@ -33,6 +43,6 @@ Independent. The graph keeps no request-scoped state and registers no prompt or 
 
 ## Known Limitations and Deferred Work
 
-- **In-memory projects** — projects live for the service lifetime and are not durable across restarts; the session log records every tool-visible mutation through `tool/result`, but a storage-domain-backed trace store is deferred.
+- **Snapshot, not a journal** — persistence is one atomic JSON snapshot per data directory (fsync durability out of scope); with `dataDir` unset, projects stay in memory and the session log's `tool/result` records remain the only durable trace.
 - **Potential impacts are a tag heuristic** — semantic relatedness beyond shared tags is exactly the design's model-assisted, human-confirmed tier, so `potential` is advisory only.
 - **No cross-project queries** — the service exposes no union or search across scope keys, matching the per-project isolation rule.

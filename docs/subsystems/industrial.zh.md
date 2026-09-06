@@ -99,7 +99,7 @@ onMutate(listener: () => void): void
 
 Types: [Agent](core.md)
 
-Source: [`packages/industrial/ia-gates/src/index.ts:101`](../../packages/industrial/ia-gates/src/index.ts)
+Source: [`packages/industrial/ia-gates/src/index.ts:112`](../../packages/industrial/ia-gates/src/index.ts)
 
 <a id="ctxiaknowledge--iaknowledgeservice"></a>
 
@@ -154,7 +154,7 @@ readiness(): Readiness
 onMutate(listener: () => void): void
 ```
 
-Source: [`packages/industrial/ia-knowledge/src/index.ts:74`](../../packages/industrial/ia-knowledge/src/index.ts)
+Source: [`packages/industrial/ia-knowledge/src/index.ts:83`](../../packages/industrial/ia-knowledge/src/index.ts)
 
 <a id="ctxiaorchestrator--iaorchestratorservice"></a>
 
@@ -188,6 +188,16 @@ project(projectId: ProjectId): ProjectSnapshot
 /** List every instantiated project.
  * @returns all instantiated projects, snapshotted with synced gate decisions. */
 projectsList(): ProjectSnapshot[]
+
+/**
+ * Assemble the project's audit package (§5.4): every stage's machine state
+ * plus the complete request-and-decision history of its bound gate. The
+ * package is deliberately complete — it is the evidence chain for export,
+ * review, or archival, not a bounded UI projection.
+ * @param projectId - the project to export.
+ * @returns the assembled audit package.
+ */
+exportAudit(projectId: ProjectId): AuditPackage
 
 /**
  * Start a `pending` stage; every predecessor stage must have passed.
@@ -225,7 +235,7 @@ resolveEscalation(projectId: ProjectId, stageId: StageId, instruction: string): 
 onMutate(listener: () => void): void
 ```
 
-Source: [`packages/industrial/ia-orchestrator/src/index.ts:146`](../../packages/industrial/ia-orchestrator/src/index.ts)
+Source: [`packages/industrial/ia-orchestrator/src/index.ts:156`](../../packages/industrial/ia-orchestrator/src/index.ts)
 
 <a id="ctxiatrace--iatraceservice"></a>
 
@@ -256,7 +266,7 @@ onProjectOpen(listener: (project: TraceProject) => void): void
 hasProject(scope: string): boolean
 ```
 
-Source: [`packages/industrial/ia-trace/src/index.ts:301`](../../packages/industrial/ia-trace/src/index.ts)
+Source: [`packages/industrial/ia-trace/src/index.ts:347`](../../packages/industrial/ia-trace/src/index.ts)
 
 <a id="ctxiaverifiers--iaverifiers"></a>
 

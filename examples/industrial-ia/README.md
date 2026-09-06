@@ -16,7 +16,7 @@ Sites with a TIA Portal Openness bridge add the real-vendor compile channel on t
 dsh web --patch examples/industrial-ia/cordis.yml --patch examples/industrial-ia/cordis.openness.yml
 ```
 
-The same rows ship as the [`dsh-ia` bundle](../../packages/bundle/ia/README.md) for profiles that prefer bundle composition. To mount them persistently, list `@deepseek-ai/dsh-ia` in the profile's `dsh.profile.bundles` (and make the bundle resolvable from the profile's node_modules, e.g. a junction into the checkout).
+The same rows ship as the [`dsh-ia` bundle](../../packages/bundle/ia/README.md) for profiles that prefer bundle composition. To mount them persistently, list `@deepseek-ai/dsh-ia` in the profile's `dsh.profile.bundles` (and make the bundle resolvable from the profile's node_modules, e.g. a junction into the checkout). Industrial state (projects, trace graphs, gate decisions, knowledge entries) survives restarts only when each stateful service gets a `dataDir` — patch the `ia-gates` / `ia-trace` / `ia-knowledge` / `ia-orchestrator` rows with a config override, e.g. `dataDir: D:\Tools\tia-smoke\ia-data\gates`.
 
 ## Smoke
 
@@ -26,7 +26,7 @@ After the overlay or bundle is mounted, verify the closed loop end to end withou
 pnpm exec tsx examples/industrial-ia/smoke.mjs
 ```
 
-The smoke boots the real Loader over the six rows and checks tool registration, a verification pass/fail pair, the mandatory-gate roster, the conveyor-line template, and the request-only gate schema. A second boot mounts the openness compile verifier over a local fake bridge and proves the vendor channel: `tia-compile` registers, adjudicates TIA SCL through the bridge wire protocol, and joins the conveyor-line control-program verifier roster.
+The smoke boots the real Loader over the six rows and checks tool registration, a verification pass/fail pair, the mandatory-gate roster, the conveyor-line template, and the request-only gate schema. A second boot mounts the openness compile verifier over a local fake bridge and proves the vendor channel: `tia-compile` registers, adjudicates TIA SCL through the bridge wire protocol, and joins the conveyor-line control-program verifier roster. A third boot proves persistence: projects, gate decisions, knowledge entries, and trace graphs written in one boot survive a fresh boot against the same `dataDir`s.
 
 ## Try it
 

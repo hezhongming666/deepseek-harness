@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/industrial/ia-gates/README.md
-README.md: 247347590d9511f30f99f33499e0e015bc436445
-README.zh.md: bf7dd18dfc50b6317a71d8c2ba7383db0f1321e1
+README.md: 8ebf316b88c305aa14172b2ef3990bbaf97e554a
+README.zh.md: 9b6e7c0daba5fa81e0375da5d2e0f17822cb91ff

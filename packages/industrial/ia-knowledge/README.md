@@ -11,6 +11,7 @@ The standards/templates/cases knowledge libraries (§6.2) with the learning sink
 | `minTemplates` | Cold-start minimum template scale, default 20 (§6.2). |
 | `minCases` | Cold-start minimum case scale, default 30 (§6.2). |
 | `maxSearchResults` | Retrieval result cap, default 10. |
+| `dataDir` | Directory the entries persist to; default empty = in-memory only. Non-empty restores all entries from `<dataDir>/ia-knowledge.json` at load and snapshots after every mutation. |
 
 Non-positive integers fail at load.
 
@@ -27,6 +28,10 @@ Non-positive integers fail at load.
 
 Search results flag `degraded: true` while the libraries are below their minimum scale — the architecture's explicit pure-generation marker (§6.2). The invariant companion proves the citation contract after every mutation.
 
+## Persistence
+
+With `dataDir` configured, every committed mutation — `record` and `approveEntry` — writes one atomic versioned snapshot (`ia-knowledge.json`); a fresh boot restores all entries with their citations, review status, timestamps, and the issuing ordinal. A corrupt or wrong-version snapshot fails at load, and a failed snapshot write throws while the in-memory commit stands (the disk may lag memory until the next successful save).
+
 ## Model Experience
 
 Indirectly, through dsh-tool-ia's `ia_knowledge` tool, which is the only model-facing surface that renders these libraries.
@@ -37,6 +42,6 @@ Independent. The libraries keep no request-scoped state and register no prompt o
 
 ## Known Limitations and Deferred Work
 
-- **In-memory libraries** — entries live for the service lifetime; a file-backed or storage-domain-backed library with human-editable seed files is deferred.
+- **Snapshot, not a seed library** — persistence is one atomic JSON snapshot per data directory (fsync durability out of scope), not human-editable seed files; with `dataDir` unset, entries stay in memory.
 - **Keyword retrieval, not embeddings** — deterministic substring matching is the honest cold-start RAG; semantic retrieval is deferred to a vector backend.
 - **Approval is service-only** — `approveEntry` is a service API for future human commands/UI; no model-facing tool exposes it.

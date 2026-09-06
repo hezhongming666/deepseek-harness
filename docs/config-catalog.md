@@ -879,6 +879,14 @@ export interface Config {
    * else fails at load.
    */
   level?: AutomationLevel
+  /**
+   * Directory the gate-engine state persists to (default empty = in-memory
+   * only). Non-empty restores requests and decisions from
+   * `<dataDir>/ia-gates.json` at load and snapshots after every mutation.
+   * Gate definitions and auto-release rules are registration effects (code)
+   * and are never persisted.
+   */
+  dataDir?: string
 }
 
 /**
@@ -890,7 +898,7 @@ export interface Config {
 export type AutomationLevel = 'A0' | 'A1' | 'A2' | 'A3'
 ```
 
-Source: [`packages/industrial/ia-gates/src/index.ts:83`](../packages/industrial/ia-gates/src/index.ts)
+Source: [`packages/industrial/ia-gates/src/index.ts:85`](../packages/industrial/ia-gates/src/index.ts)
 
 <a id="deepseek-aidsh-ia-knowledge"></a>
 
@@ -908,10 +916,16 @@ export interface Config {
   minCases?: number
   /** Maximum hits one retrieval returns (default 10). */
   maxSearchResults?: number
+  /**
+   * Directory the entries persist to (default empty = in-memory only).
+   * Non-empty restores all entries from `<dataDir>/ia-knowledge.json` at load
+   * and snapshots after every mutation.
+   */
+  dataDir?: string
 }
 ```
 
-Source: [`packages/industrial/ia-knowledge/src/index.ts:33`](../packages/industrial/ia-knowledge/src/index.ts)
+Source: [`packages/industrial/ia-knowledge/src/index.ts:35`](../packages/industrial/ia-knowledge/src/index.ts)
 
 <a id="deepseek-aidsh-ia-orchestrator"></a>
 
@@ -926,10 +940,36 @@ Requires: `iaVerifiers` · `iaGates`
 export interface Config {
   /** The template instantiated by {@link IaOrchestratorService.initProject} (default `conveyor-line`). */
   template?: string
+  /**
+   * Directory the project state persists to (default empty = in-memory only).
+   * Non-empty restores all projects from `<dataDir>/ia-orchestrator.json` at
+   * load and snapshots after every mutation.
+   */
+  dataDir?: string
 }
 ```
 
-Source: [`packages/industrial/ia-orchestrator/src/index.ts:102`](../packages/industrial/ia-orchestrator/src/index.ts)
+Source: [`packages/industrial/ia-orchestrator/src/index.ts:105`](../packages/industrial/ia-orchestrator/src/index.ts)
+
+<a id="deepseek-aidsh-ia-trace"></a>
+
+## `@deepseek-ai/dsh-ia-trace`
+
+```ts config-catalog
+/**
+ * Trace service configuration.
+ */
+export interface Config {
+  /**
+   * Directory the trace graphs persist to (default empty = in-memory only).
+   * Non-empty restores every scoped project from `<dataDir>/ia-trace.json` at
+   * load and snapshots after every mutation.
+   */
+  dataDir?: string
+}
+```
+
+Source: [`packages/industrial/ia-trace/src/index.ts:328`](../packages/industrial/ia-trace/src/index.ts)
 
 <a id="deepseek-aidsh-ia-verifier"></a>
 
@@ -3503,7 +3543,6 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@deepseek-ai/dsh-host-directory-picker-auto` — requires `webServer` · `loader` ([`packages/host/directory-picker-auto/src/index.ts`](../packages/host/directory-picker-auto/src/index.ts))
 - `@deepseek-ai/dsh-host-directory-picker-native` ([`packages/host/directory-picker-native/src/index.ts`](../packages/host/directory-picker-native/src/index.ts))
 - `@deepseek-ai/dsh-host-plugin-inventory` — requires `loader` ([`packages/host/plugin-inventory/src/index.ts`](../packages/host/plugin-inventory/src/index.ts))
-- `@deepseek-ai/dsh-ia-trace` ([`packages/industrial/ia-trace/src/index.ts`](../packages/industrial/ia-trace/src/index.ts))
 - `@deepseek-ai/dsh-llm` ([`packages/llm/llm/src/index.ts`](../packages/llm/llm/src/index.ts))
 - `@deepseek-ai/dsh-lsp` ([`packages/lsp/lsp/src/index.ts`](../packages/lsp/lsp/src/index.ts))
 - `@deepseek-ai/dsh-schedule` — requires `agents` · `sessions` · `tools` · `sessionPersistence` ([`packages/schedule/schedule/src/index.ts`](../packages/schedule/schedule/src/index.ts))

@@ -9,6 +9,7 @@ The project orchestrator (§3.10): a DAG stage machine with verify-then-gate tra
 | key | meaning |
 |---|---|
 | `template` | The template `initProject` instantiates by default: `conveyor-line`. Unknown names fail at load. |
+| `dataDir` | Directory the project state persists to; default empty = in-memory only. Non-empty restores all projects from `<dataDir>/ia-orchestrator.json` at load and snapshots after every mutation. |
 
 ## The `conveyor-line` template
 
@@ -38,9 +39,16 @@ Stage states: `pending → running → (repair ↺ | gated | passed | escalated)
 - `advance(projectId, stageId)` — start a `pending` stage; all predecessors must have passed.
 - `submit(projectId, stageId, submission)` — run verifiers, then gate or pass, repair, or escalate.
 - `resolveEscalation(projectId, stageId, instruction)` — supervisor path: back to `running` with a fresh budget and the instruction attached. No model-facing tool exposes it.
+- `exportAudit(projectId)` — the §5.4 audit package: every stage's machine state plus the complete request-and-decision history of its bound gate.
 - `templatesList()` — registered template names.
 
+When a submission passes after failing in the same inner-loop run, the learning pipeline (§4.3) sediments the failure-repair pair into the optional knowledge service as one `pending-review` case; the sink's duplicate rejection is the dedup gate, and no sink failure ever blocks a passed stage.
+
 At load the service validates every bound verifier kind against the composed registry and registers the `release-review` gate — misconfiguration fails loud. The invariant companion proves the stage machine after every mutation: no stage runs ahead of an unpassed predecessor, attempts never exceed the budget, escalated stages carry their package, and passed verifier-bound stages hold only passing reports.
+
+## Persistence
+
+With `dataDir` configured, every committed mutation — project instantiation, advances, submissions in every branch, escalation resolutions, and gate-decision syncs folded in on read — writes one atomic versioned snapshot (`ia-orchestrator.json`); a fresh boot restores all projects with their stage machines, attempts, latest reports, escalations, instructions, and the project-id ordinal, re-binding each stage to its template node. A corrupt or wrong-version snapshot fails at load, and a failed snapshot write throws while the in-memory commit stands (the disk may lag memory until the next successful save).
 
 ## Model Experience
 
@@ -52,6 +60,6 @@ Independent. The orchestrator keeps no request-scoped state and registers no pro
 
 ## Known Limitations and Deferred Work
 
-- **In-memory projects** — stage state is not durable across restarts (the architecture's §5.5 persistence is deferred); the session log records every tool-visible transition.
+- **Snapshot, not a journal** — persistence is one atomic JSON snapshot per data directory (fsync durability out of scope); with `dataDir` unset, stage state stays in memory and the session log's tool-visible transitions remain the only durable record.
 - **Linear template chain** — custom DAG topologies (parallel hmi/electrical stages, ops-loop re-entry) require registering additional templates; only `conveyor-line` ships.
 - **Escalation resolution is human-only** — no rule can resolve an escalation; the supervisor path is the `resolveEscalation` service API.

@@ -15,6 +15,7 @@ import { GateId } from '@deepseek-ai/dsh-ia-gates'
 import type { VerificationReport } from '@deepseek-ai/dsh-ia-verifier'
 import { ProjectId, StageId, StageTransitionError, UnknownStageError } from './types.ts'
 import type {
+  AuditPackage,
   DagTemplate,
   EscalationPackage,
   ProjectSnapshot,
@@ -23,6 +24,8 @@ import type {
   StageTemplate,
   Submission,
 } from './types.ts'
+import { loadOrchestratorSnapshot, saveOrchestratorSnapshot } from './persistence.ts'
+import type { OrchestratorSnapshotState } from './persistence.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -102,11 +105,18 @@ const RELEASE_REVIEW = {
 export interface Config {
   /** The template instantiated by {@link IaOrchestratorService.initProject} (default `conveyor-line`). */
   template?: string
+  /**
+   * Directory the project state persists to (default empty = in-memory only).
+   * Non-empty restores all projects from `<dataDir>/ia-orchestrator.json` at
+   * load and snapshots after every mutation.
+   */
+  dataDir?: string
 }
 
 /** Schemastery configuration for the orchestrator. */
 export const Config: Schema<Config> = z.object({
   template: z.string().default('conveyor-line'),
+  dataDir: z.string().default(''),
 })
 
 /** Internal per-stage record backing the snapshots. */
@@ -149,6 +159,7 @@ export class IaOrchestratorService extends Service {
   static inject = ['iaVerifiers', 'iaGates']
 
   private readonly defaultTemplate: string
+  private readonly dataDir: string
   private readonly verifiers: Context['iaVerifiers']
   private readonly gates: Context['iaGates']
   private readonly templates = new Map<string, DagTemplate>()
@@ -158,14 +169,17 @@ export class IaOrchestratorService extends Service {
 
   /**
    * Create the orchestrator, validate the template against the composed
-   * verifier and gate registries, and register the release-review gate.
+   * verifier and gate registries, register the release-review gate, and
+   * restore the persisted projects when a `dataDir` is configured. A corrupt
+   * or wrong-version snapshot fails at load.
    * @param ctx - Cordis context carrying the verifier and gate services.
-   * @param config - the default instantiation template.
+   * @param config - the default instantiation template and optional data directory.
    */
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'iaOrchestrator')
     this.verifiers = ctx.iaVerifiers
     this.gates = ctx.iaGates
+    this.dataDir = (config.dataDir ?? '').trim()
     this.templates.set(CONVEYOR_LINE.name, CONVEYOR_LINE)
     const templateName = config.template ?? 'conveyor-line'
     const template = this.templates.get(templateName)
@@ -182,6 +196,70 @@ export class IaOrchestratorService extends Service {
       }
     }
     this.gates.registerGate(RELEASE_REVIEW)
+    if (this.dataDir.length > 0) this.restore()
+  }
+
+  /** Restore projects from the snapshot, re-binding each stage to its template node. */
+  private restore(): void {
+    const restored = loadOrchestratorSnapshot(this.dataDir)
+    if (restored === undefined) return
+    for (const entry of restored.projects) {
+      const template = this.templates.get(entry.template)
+      if (template === undefined) {
+        throw new Error(`iaOrchestrator snapshot ${this.dataDir}: project ${String(entry.id)} names unknown template ${JSON.stringify(entry.template)}`)
+      }
+      const templateStages = new Map(template.stages.map(stage => [String(stage.id), stage]))
+      const stages: StageRecord[] = entry.stages.map((stageState) => {
+        const templateStage = templateStages.get(String(stageState.stageId))
+        if (templateStage === undefined) {
+          throw new Error(`iaOrchestrator snapshot ${this.dataDir}: project ${String(entry.id)} names unknown stage ${JSON.stringify(String(stageState.stageId))}`)
+        }
+        const record: StageRecord = {
+          template: templateStage,
+          state: stageState.state,
+          attempts: stageState.attempts,
+        }
+        if (stageState.reports !== undefined) record.reports = stageState.reports
+        if (stageState.escalation !== undefined) record.escalation = stageState.escalation
+        if (stageState.instruction !== undefined) record.instruction = stageState.instruction
+        return record
+      })
+      this.projects.set(entry.id, {
+        id: entry.id,
+        template: entry.template,
+        stages,
+        requestedGates: entry.requestedGates.map(GateId),
+        instructions: entry.instructions.map(item => ({ stageId: item.stageId, instruction: item.instruction })),
+      })
+    }
+    this.ordinal = restored.ordinal
+  }
+
+  /** Snapshot the current state; a failed write fails loud and names the divergence. */
+  private persist(): void {
+    if (this.dataDir.length === 0) return
+    const state: OrchestratorSnapshotState = {
+      ordinal: this.ordinal,
+      projects: [...this.projects.values()].map(record => ({
+        id: record.id,
+        template: record.template,
+        stages: record.stages.map(stage => ({
+          stageId: stage.template.id,
+          state: stage.state,
+          attempts: stage.attempts,
+          ...(stage.reports === undefined ? {} : { reports: stage.reports }),
+          ...(stage.escalation === undefined ? {} : { escalation: stage.escalation }),
+          ...(stage.instruction === undefined ? {} : { instruction: stage.instruction }),
+        })),
+        requestedGates: record.requestedGates.map(String),
+        instructions: record.instructions.map(item => ({ stageId: item.stageId, instruction: item.instruction })),
+      })),
+    }
+    try {
+      saveOrchestratorSnapshot(this.dataDir, state)
+    } catch (error) {
+      throw new Error(`iaOrchestrator: state committed in memory but the snapshot write failed: ${renderError(error)}`)
+    }
   }
 
   /** List the registered template names.
@@ -217,6 +295,7 @@ export class IaOrchestratorService extends Service {
     }
     this.projects.set(id, record)
     this.notify()
+    this.persist()
     return this.snapshot(record)
   }
 
@@ -229,17 +308,51 @@ export class IaOrchestratorService extends Service {
    */
   project(projectId: ProjectId): ProjectSnapshot {
     const record = this.requireProject(projectId)
-    this.syncGates(record)
+    if (this.syncGates(record)) this.persist()
     return this.snapshot(record)
   }
 
   /** List every instantiated project.
    * @returns all instantiated projects, snapshotted with synced gate decisions. */
   projectsList(): ProjectSnapshot[] {
-    return [...this.projects.values()].map((record) => {
-      this.syncGates(record)
-      return this.snapshot(record)
-    })
+    const records = [...this.projects.values()]
+    let changed = false
+    for (const record of records) {
+      if (this.syncGates(record)) changed = true
+    }
+    if (changed) this.persist()
+    return records.map(record => this.snapshot(record))
+  }
+
+  /**
+   * Assemble the project's audit package (§5.4): every stage's machine state
+   * plus the complete request-and-decision history of its bound gate. The
+   * package is deliberately complete — it is the evidence chain for export,
+   * review, or archival, not a bounded UI projection.
+   * @param projectId - the project to export.
+   * @returns the assembled audit package.
+   */
+  exportAudit(projectId: ProjectId): AuditPackage {
+    const record = this.requireProject(projectId)
+    if (this.syncGates(record)) this.persist()
+    return {
+      projectId: record.id,
+      template: record.template,
+      exportedAt: Date.now(),
+      stages: record.stages.map(stage => ({
+        stageId: stage.template.id,
+        title: stage.template.title,
+        state: stage.state,
+        attempts: stage.attempts,
+        maxRetries: stage.template.maxRetries,
+        verifiers: this.effectiveVerifiers(stage),
+        ...(stage.template.gate !== undefined ? { gate: stage.template.gate } : {}),
+        ...(stage.reports !== undefined ? { reports: stage.reports } : {}),
+        ...(stage.escalation !== undefined ? { escalation: stage.escalation } : {}),
+        ...(stage.instruction !== undefined ? { instruction: stage.instruction } : {}),
+        gateRequests: stage.template.gate === undefined ? [] : this.gates.requestsFor(stage.template.gate),
+      })),
+    }
   }
 
   /**
@@ -262,6 +375,7 @@ export class IaOrchestratorService extends Service {
     }
     stage.state = 'running'
     this.notify()
+    this.persist()
     return this.snapshot(record)
   }
 
@@ -291,6 +405,7 @@ export class IaOrchestratorService extends Service {
       text: submission.text,
       ...(submission.vendorSource === undefined ? {} : { vendorSource: submission.vendorSource }),
     })
+    const previousReports = stage.reports
     stage.reports = reports
     const passed = reports.every(report => report.pass)
     if (!passed) {
@@ -299,10 +414,12 @@ export class IaOrchestratorService extends Service {
         stage.state = 'escalated'
         stage.escalation = buildEscalation(stage, submission, reports)
         this.notify()
+        this.persist()
         return this.stageSnapshot(stage)
       }
       stage.state = 'repair'
       this.notify()
+      this.persist()
       return this.stageSnapshot(stage)
     }
     if (stage.template.gate !== undefined) {
@@ -316,9 +433,54 @@ export class IaOrchestratorService extends Service {
       record.requestedGates.push(gate)
     } else {
       stage.state = 'passed'
+      this.sedimentRepairPair(projectId, stage, submission, previousReports)
     }
     this.notify()
+    this.persist()
     return this.stageSnapshot(stage)
+  }
+
+  /**
+   * Learning-pipeline sedimentation (§4.3): when a submission passes after
+   * failing in the same inner-loop run, record the failure-repair pair into
+   * the optional knowledge sink as a `pending-review` case. The sink's
+   * duplicate rejection is the dedup gate; every sink failure is swallowed
+   * because a passed stage must never be blocked by draft sedimentation.
+   * @param projectId - the owning project.
+   * @param stage - the passed stage.
+   * @param submission - the passing submission (the fix).
+   * @param previous - the preceding failing reports, when any.
+   */
+  private sedimentRepairPair(
+    projectId: ProjectId,
+    stage: StageRecord,
+    submission: Submission,
+    previous: VerificationReport[] | undefined,
+  ): void {
+    if (previous === undefined) return
+    const failures = previous.filter(report => !report.pass)
+    if (failures.length === 0) return
+    const knowledge = this.ctx.get('iaKnowledge') as KnowledgeSink | undefined
+    if (knowledge === undefined) return
+    const summary = failures
+      .map(report => `${report.kind}: ${report.diagnostics.filter(d => d.severity === 'error').length} error(s)`)
+      .join('; ')
+    try {
+      knowledge.record({
+        library: 'cases',
+        title: `stage ${String(stage.template.id)} repair: ${summary}`.slice(0, 120),
+        content: `Failure (verifier reports): ${summary}\nFix (passing artifact):\n${submission.text}`.slice(0, MAX_CASE_CONTENT),
+        tags: ['learning-pipeline', 'failure-repair', String(stage.template.id)],
+        source: `project:${String(projectId)}`,
+        version: 'v1',
+        recordedBy: submission.submittedBy.trim(),
+        reviewStatus: 'pending-review',
+      })
+    } catch {
+      // Named swallow: the sink's duplicate rejection is the dedup gate, and
+      // any other sink failure is a best-effort draft failure — neither may
+      // block a stage that already passed.
+    }
   }
 
   /**
@@ -343,6 +505,7 @@ export class IaOrchestratorService extends Service {
     delete stage.escalation
     record.instructions.unshift({ stageId, instruction: instruction.trim() })
     this.notify()
+    this.persist()
     return this.stageSnapshot(stage)
   }
 
@@ -359,15 +522,22 @@ export class IaOrchestratorService extends Service {
     return record
   }
 
-  /** Pull the latest gate decisions into gated stages. */
-  private syncGates(record: ProjectRecord): void {
+  /** Pull the latest gate decisions into gated stages; returns whether anything changed. */
+  private syncGates(record: ProjectRecord): boolean {
+    let changed = false
     for (const stage of record.stages) {
       if (stage.state !== 'gated' || stage.template.gate === undefined) continue
       const decision = this.gates.latestDecision(stage.template.gate)
       if (decision === undefined) continue
-      if (decision.outcome === 'approved') stage.state = 'passed'
-      else stage.state = 'running'
+      if (decision.outcome === 'approved') {
+        stage.state = 'passed'
+        changed = true
+      } else {
+        stage.state = 'running'
+        changed = true
+      }
     }
+    return changed
   }
 
   /**
@@ -451,3 +621,29 @@ function buildEscalation(stage: StageRecord, submission: Submission, reports: re
 
 export default IaOrchestratorService
 export * from './types.ts'
+
+/** Upper bound on one auto-sedimented case body. */
+const MAX_CASE_CONTENT = 4_000
+
+/** Minimal structural face of the optional knowledge sink the learning pipeline feeds. */
+interface KnowledgeSink {
+  record(input: {
+    library: 'cases'
+    title: string
+    content: string
+    tags: string[]
+    source: string
+    version: string
+    recordedBy: string
+    reviewStatus: 'pending-review'
+  }): unknown
+}
+
+/** Render any thrown value without letting the render itself throw. */
+function renderError(error: unknown): string {
+  try {
+    return String(error instanceof Error ? error.message : error)
+  } catch {
+    return '[unrenderable thrown value]'
+  }
+}

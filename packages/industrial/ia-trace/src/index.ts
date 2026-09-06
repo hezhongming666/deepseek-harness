@@ -8,6 +8,8 @@
  */
 
 import { Context, Service } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
+import type Schema from '@deepseek-ai/schemastery'
 import type {
   ChangeRecord,
   ImpactAnalysis,
@@ -18,6 +20,8 @@ import type {
   TraceNodeKind,
 } from './types.ts'
 import { TraceNodeId, DuplicateTraceLinkError, UnknownTraceNodeError } from './types.ts'
+import { loadTraceSnapshot, saveTraceSnapshot } from './persistence.ts'
+import type { TraceProjectState, TraceSnapshotState } from './persistence.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -291,7 +295,49 @@ export class TraceProject {
   private notify(): void {
     for (const listener of this.listeners) listener(this)
   }
+
+  /** Project the complete project state for snapshot persistence.
+   * @returns the nodes, links, changes, and ordinal without the scope key. */
+  snapshotState(): Omit<TraceProjectState, 'scope'> {
+    return {
+      ordinal: this.ordinal,
+      nodes: [...this.nodes.values()],
+      links: [...this.links],
+      changes: [...this.changes],
+    }
+  }
+
+  /**
+   * Rebuild one project from a validated snapshot state.
+   * @param state - the restored nodes, links, changes, and ordinal.
+   * @returns the hydrated project.
+   */
+  static restore(state: Omit<TraceProjectState, 'scope'>): TraceProject {
+    const project = new TraceProject()
+    project.ordinal = state.ordinal
+    for (const node of state.nodes) project.nodes.set(node.id, node)
+    project.links.push(...state.links)
+    project.changes.push(...state.changes)
+    return project
+  }
 }
+
+/**
+ * Trace service configuration.
+ */
+export interface Config {
+  /**
+   * Directory the trace graphs persist to (default empty = in-memory only).
+   * Non-empty restores every scoped project from `<dataDir>/ia-trace.json` at
+   * load and snapshots after every mutation.
+   */
+  dataDir?: string
+}
+
+/** Schemastery configuration for the traceability service. */
+export const Config: Schema<Config> = z.object({
+  dataDir: z.string().default(''),
+})
 
 /**
  * The traceability service. It owns no project state itself — callers open
@@ -299,21 +345,63 @@ export class TraceProject {
  * scoped projects alive until the service disposes.
  */
 export class IaTraceService extends Service {
+  static Config: Schema<Config> = Config
+
+  private readonly dataDir: string
   private readonly projects = new Map<string, TraceProject>()
   private readonly openListeners = new Set<(project: TraceProject) => void>()
 
   /**
-   * Create the trace service.
+   * Create the trace service and restore the persisted projects when a
+   * `dataDir` is configured. A corrupt or wrong-version snapshot fails at
+   * load.
    * @param ctx - Cordis context that owns the service.
+   * @param config - the optional data directory.
    */
-  constructor(ctx: Context) {
+  constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'iaTrace')
+    this.dataDir = (config.dataDir ?? '').trim()
     // Projects and open-listeners live as long as the service; the effect
     // disposer releases them together.
     ctx.effect(() => () => {
       this.projects.clear()
       this.openListeners.clear()
     })
+    if (this.dataDir.length > 0) this.restore()
+  }
+
+  /** Restore every scoped project from the snapshot and wire persistence. */
+  private restore(): void {
+    const restored = loadTraceSnapshot(this.dataDir)
+    if (restored === undefined) return
+    for (const entry of restored.scopes) {
+      const project = this.openRestored(entry)
+      this.projects.set(entry.scope, project)
+    }
+  }
+
+  /** Hydrate one restored project with its persistence listener and open notification. */
+  private openRestored(entry: TraceProjectState): TraceProject {
+    const project = TraceProject.restore(entry)
+    project.onMutate(() => { this.persist() })
+    for (const listener of this.openListeners) listener(project)
+    return project
+  }
+
+  /** Snapshot every scoped project; a failed write fails loud and names the divergence. */
+  private persist(): void {
+    if (this.dataDir.length === 0) return
+    const state: TraceSnapshotState = {
+      scopes: [...this.projects.entries()].map(([scope, project]) => ({
+        scope,
+        ...project.snapshotState(),
+      })),
+    }
+    try {
+      saveTraceSnapshot(this.dataDir, state)
+    } catch (error) {
+      throw new Error(`iaTrace: state committed in memory but the snapshot write failed: ${renderError(error)}`)
+    }
   }
 
   /**
@@ -326,6 +414,9 @@ export class IaTraceService extends Service {
     if (project === undefined) {
       project = new TraceProject()
       this.projects.set(scope, project)
+      if (this.dataDir.length > 0) {
+        project.onMutate(() => { this.persist() })
+      }
       for (const listener of this.openListeners) listener(project)
     }
     return project
@@ -352,3 +443,12 @@ export class IaTraceService extends Service {
 
 export default IaTraceService
 export * from './types.ts'
+
+/** Render any thrown value without letting the render itself throw. */
+function renderError(error: unknown): string {
+  try {
+    return String(error instanceof Error ? error.message : error)
+  } catch {
+    return '[unrenderable thrown value]'
+  }
+}

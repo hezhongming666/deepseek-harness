@@ -22,6 +22,8 @@ import type {
   GateRequestContext,
   HumanDecisionOutcome,
 } from './types.ts'
+import { loadGatesSnapshot, saveGatesSnapshot } from './persistence.ts'
+import type { GatesSnapshotState } from './persistence.ts'
 
 // The approval-channel Context face, read through ctx.get so the gate engine
 // stays composed even when no approval service is mounted.
@@ -86,11 +88,20 @@ export interface Config {
    * else fails at load.
    */
   level?: AutomationLevel
+  /**
+   * Directory the gate-engine state persists to (default empty = in-memory
+   * only). Non-empty restores requests and decisions from
+   * `<dataDir>/ia-gates.json` at load and snapshots after every mutation.
+   * Gate definitions and auto-release rules are registration effects (code)
+   * and are never persisted.
+   */
+  dataDir?: string
 }
 
 /** Schemastery configuration for the gate engine. */
 export const Config: Schema<Config> = z.object({
   level: z.union([z.const('A0'), z.const('A1'), z.const('A2'), z.const('A3')]).default('A1'),
+  dataDir: z.string().default(''),
 })
 
 /**
@@ -102,6 +113,7 @@ export class IaGatesService extends Service {
   static Config: Schema<Config> = Config
 
   private readonly level: AutomationLevel
+  private readonly dataDir: string
   private readonly gates = new Map<GateId, GateDefinition>()
   private readonly rules = new Map<GateId, { id: string; rule: AutoReleaseRule }>()
   private readonly requestsByGate = new Map<GateId, GateRequest[]>()
@@ -109,16 +121,46 @@ export class IaGatesService extends Service {
   private readonly listeners = new Set<() => void>()
 
   /**
-   * Create the gate engine and register the six mandatory gates.
+   * Create the gate engine, register the six mandatory gates, and restore the
+   * persisted state when a `dataDir` is configured. A corrupt or wrong-version
+   * snapshot fails at load.
    * @param ctx - Cordis context that owns the service.
-   * @param config - the deployment automation level.
+   * @param config - the deployment automation level and optional data directory.
    */
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'iaGates')
     // The schema's literal union rejects other values before construction.
     this.level = config.level ?? 'A1'
+    this.dataDir = (config.dataDir ?? '').trim()
     for (const gate of MANDATORY_GATES) {
       this.gates.set(gate.id, { ...gate, mandatory: true })
+    }
+    if (this.dataDir.length > 0) this.restore()
+  }
+
+  /** Restore requests and the ordinal from the snapshot. */
+  private restore(): void {
+    const restored = loadGatesSnapshot(this.dataDir)
+    if (restored === undefined) return
+    for (const request of restored.requests) {
+      const list = this.requestsByGate.get(request.gateId) ?? []
+      list.push(request)
+      this.requestsByGate.set(request.gateId, list)
+    }
+    this.ordinal = restored.ordinal
+  }
+
+  /** Snapshot the current state; a failed write fails loud and names the divergence. */
+  private persist(): void {
+    if (this.dataDir.length === 0) return
+    const state: GatesSnapshotState = {
+      ordinal: this.ordinal,
+      requests: this.requests(),
+    }
+    try {
+      saveGatesSnapshot(this.dataDir, state)
+    } catch (error) {
+      throw new Error(`iaGates: state committed in memory but the snapshot write failed: ${renderError(error)}`)
     }
   }
 
@@ -220,6 +262,7 @@ export class IaGatesService extends Service {
       }
     }
     this.notify()
+    this.persist()
     return request
   }
 
@@ -251,6 +294,7 @@ export class IaGatesService extends Service {
         decidedAt: Date.now(),
       }
       this.notify()
+      this.persist()
       return 'approved'
     }
     if (outcome === 'rejected') {
@@ -261,6 +305,7 @@ export class IaGatesService extends Service {
         decidedAt: Date.now(),
       }
       this.notify()
+      this.persist()
       return 'rejected'
     }
     return 'pending'
@@ -298,6 +343,15 @@ export class IaGatesService extends Service {
   /** Publish a mutation to listeners after it has committed. */
   private notify(): void {
     for (const listener of this.listeners) listener()
+  }
+}
+
+/** Render any thrown value without letting the render itself throw. */
+function renderError(error: unknown): string {
+  try {
+    return String(error instanceof Error ? error.message : error)
+  } catch {
+    return '[unrenderable thrown value]'
   }
 }
 

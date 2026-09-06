@@ -7,7 +7,7 @@ Zero-dependency atomic file replacement shared by file-backed stores that must n
 ## Surface
 
 ```ts
-import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
+import { readJsonSnapshot, withFileLock, writeFileAtomic, writeJsonSnapshot } from '@deepseek-ai/dsh-atomic-write'
 
 declare const text: string
 declare const render: (previous: string) => string
@@ -18,6 +18,12 @@ await writeFileAtomic('/home/u/.dsh/settings.yaml', text, { mode: 0o600 })
 await withFileLock('/home/u/.dsh/settings.yaml', async () => {
   await writeFileAtomic('/home/u/.dsh/settings.yaml', render(text), { mode: 0o600 })
 })
+
+// Versioned JSON snapshots for synchronous load-time restore: the read
+// returns `undefined` for a fresh store and fails loud on version drift or
+// malformed content; the write replaces the snapshot in one atomic step.
+const state = readJsonSnapshot('/home/u/.dsh/store.json', 1)
+writeJsonSnapshot('/home/u/.dsh/store.json', 1, { entries: ['a'] })
 ```
 
 `writeFileAtomic` commits one already-rendered string. The contract, in the order failures would exploit it:
@@ -29,6 +35,8 @@ await withFileLock('/home/u/.dsh/settings.yaml', async () => {
 - Parent directories are created; on any failure the temp is removed and the failure rethrown; readers observe either the old or the new complete content.
 
 `withFileLock` serializes the writers of one file across processes, for the read-render-commit cycles a bare atomic commit cannot make safe on its own. The lock is a `wx`-created `<filename>.lock` sibling, so readers never contend; waiters back off exponentially and fail with a timeout rather than block forever. `EEXIST` identifies contention directly; `EPERM` does so only when a fresh `lstat` confirms that the lock path exists, covering Windows exclusive-create behavior without hiding an unrelated permission failure. A contender never removes the existing lock: age cannot distinguish a crashed owner from a paused live writer.
+
+`readJsonSnapshot`/`writeJsonSnapshot` carry the same replacement discipline into synchronous, versioned JSON snapshot files: the write creates parent directories with `0o700`, stamps a `0o600` exclusive-create temp, and renames it over the target; the read treats a missing file as a fresh store, and rejects unreadable, malformed, non-record, or wrong-version content by throwing with the file named.
 
 ## Model Experience
 
