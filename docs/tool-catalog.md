@@ -1420,7 +1420,8 @@ Drive the orchestrator DAG of the current industrial project: instantiate the st
         "list",
         "status",
         "advance",
-        "submit"
+        "submit",
+        "export"
       ]
     },
     "projectId": {

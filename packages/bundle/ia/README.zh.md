@@ -23,7 +23,7 @@ dsh web --patch examples/industrial-ia/cordis.yml
 | `ia-orchestrator` | `@deepseek-ai/dsh-ia-orchestrator` |
 | `tool-ia` | `@deepseek-ai/dsh-tool-ia` |
 
-部署通过修补 `ia-gates` 行把自动化等级提升到 `A2` 并注册自动放行规则；恒人工闸门永不随等级变化。真实厂商编译验证器 `@deepseek-ai/dsh-ia-verifier-openness` 刻意不进 bundle：其桥 `url` 由部署方持有且为必填，因此拥有 TIA Portal Openness 桥的现场经 profile patch 或 `examples/industrial-ia/cordis.openness.yml` 覆盖层挂载它。
+部署通过修补 `ia-gates` 行把自动化等级提升到 `A2` 并注册自动放行规则；恒人工闸门永不随等级变化。真实厂商编译验证器 `@deepseek-ai/dsh-ia-verifier-openness` 刻意不进 bundle：其桥 `url` 由部署方持有且为必填，因此拥有 TIA Portal Openness 桥的现场经 profile patch 或 `examples/industrial-ia/cordis.openness.yml` 覆盖层挂载它。工业状态只有在每个有状态服务获得 `dataDir` 配置覆盖（`ia-gates` / `ia-trace` / `ia-knowledge` / `ia-orchestrator`）后才跨重启存续；bundle 默认以内存态交付。
 
 ## Model Experience
 

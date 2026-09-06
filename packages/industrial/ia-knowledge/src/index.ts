@@ -19,6 +19,8 @@ import type {
   SearchHit,
   SearchResult,
 } from './types.ts'
+import { loadKnowledgeSnapshot, saveKnowledgeSnapshot } from './persistence.ts'
+import type { KnowledgeSnapshotState } from './persistence.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -37,6 +39,12 @@ export interface Config {
   minCases?: number
   /** Maximum hits one retrieval returns (default 10). */
   maxSearchResults?: number
+  /**
+   * Directory the entries persist to (default empty = in-memory only).
+   * Non-empty restores all entries from `<dataDir>/ia-knowledge.json` at load
+   * and snapshots after every mutation.
+   */
+  dataDir?: string
 }
 
 /** Schemastery configuration for the knowledge service. */
@@ -44,6 +52,7 @@ export const Config: Schema<Config> = z.object({
   minTemplates: z.number().default(20),
   minCases: z.number().default(30),
   maxSearchResults: z.number().default(10),
+  dataDir: z.string().default(''),
 })
 
 /** Input for recording one knowledge entry. */
@@ -78,19 +87,50 @@ export class IaKnowledgeService extends Service {
   private readonly minTemplates: number
   private readonly minCases: number
   private readonly maxSearchResults: number
+  private readonly dataDir: string
   private ordinal = 0
   private readonly listeners = new Set<() => void>()
 
   /**
-   * Create the knowledge service with validated thresholds.
+   * Create the knowledge service with validated thresholds and restore the
+   * persisted entries when a `dataDir` is configured.
    * @param ctx - Cordis context that owns the service.
-   * @param config - the cold-start minima and the retrieval cap.
+   * @param config - the cold-start minima, the retrieval cap, and the optional data directory.
    */
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'iaKnowledge')
     this.minTemplates = requirePositiveInteger(config.minTemplates ?? 20, 'minTemplates')
     this.minCases = requirePositiveInteger(config.minCases ?? 30, 'minCases')
     this.maxSearchResults = requirePositiveInteger(config.maxSearchResults ?? 10, 'maxSearchResults')
+    this.dataDir = (config.dataDir ?? '').trim()
+    if (this.dataDir.length > 0) this.restore()
+  }
+
+  /** Restore entries and the ordinal from the snapshot. */
+  private restore(): void {
+    const restored = loadKnowledgeSnapshot(this.dataDir)
+    if (restored === undefined) return
+    for (const entry of restored.entries) {
+      if (this.entries.has(entry.id)) {
+        throw new Error(`iaKnowledge snapshot ${this.dataDir}: duplicate entry id ${String(entry.id)}`)
+      }
+      this.entries.set(entry.id, entry)
+    }
+    this.ordinal = restored.ordinal
+  }
+
+  /** Snapshot the current state; a failed write fails loud and names the divergence. */
+  private persist(): void {
+    if (this.dataDir.length === 0) return
+    const state: KnowledgeSnapshotState = {
+      ordinal: this.ordinal,
+      entries: [...this.entries.values()],
+    }
+    try {
+      saveKnowledgeSnapshot(this.dataDir, state)
+    } catch (error) {
+      throw new Error(`iaKnowledge: state committed in memory but the snapshot write failed: ${renderError(error)}`)
+    }
   }
 
   /**
@@ -129,6 +169,7 @@ export class IaKnowledgeService extends Service {
     }
     this.entries.set(entry.id, entry)
     this.notify()
+    this.persist()
     return entry
   }
 
@@ -144,6 +185,7 @@ export class IaKnowledgeService extends Service {
     if (entry.reviewStatus === 'approved') throw new Error(`iaKnowledge: entry ${String(id)} is already approved`)
     entry.reviewStatus = 'approved'
     this.notify()
+    this.persist()
     return entry
   }
 
@@ -225,6 +267,15 @@ function requirePositiveInteger(value: number, field: string): number {
     throw new Error(`iaKnowledge: ${field} must be a positive integer, got ${value}`)
   }
   return value
+}
+
+/** Render any thrown value without letting the render itself throw. */
+function renderError(error: unknown): string {
+  try {
+    return String(error instanceof Error ? error.message : error)
+  } catch {
+    return '[unrenderable thrown value]'
+  }
 }
 
 export default IaKnowledgeService

@@ -21,6 +21,9 @@
       "path": "../../util/brand"
     },
     {
+      "path": "../../util/atomic-write"
+    },
+    {
       "path": "../../core/agent"
     },
     {

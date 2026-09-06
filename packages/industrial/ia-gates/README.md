@@ -9,6 +9,7 @@ The gate engine — the architecture's 人机边界 (§5.1/§5.2). The six manda
 | key | meaning |
 |---|---|
 | `level` | Deployment automation level `A0`–`A3`, default `A1` (§5.1). Anything else fails at load. |
+| `dataDir` | Directory the gate-engine state persists to; default empty = in-memory only. Non-empty restores requests and decisions from `<dataDir>/ia-gates.json` at load and snapshots after every mutation. |
 
 ## The six mandatory gates
 
@@ -35,6 +36,10 @@ The gate engine — the architecture's 人机边界 (§5.1/§5.2). The six manda
 
 There is no public decide method: the only decision paths are the approval channel and rule evaluation, both inside the service. The invariant companion proves the mandatory roster, its fixed always-human classification, and that always-human gates are never decided by a rule.
 
+## Persistence
+
+With `dataDir` configured, every committed mutation — requests and decisions — writes one atomic versioned snapshot (`ia-gates.json`); a fresh boot restores all requests with decisions and the request ordinal. Gate definitions and auto-release rules are registration effects (code) and are never persisted: their owners re-register them at boot, so a re-registered gate simply continues its restored request history. A corrupt or wrong-version snapshot fails at load, and a failed snapshot write throws while the in-memory commit stands (the disk may lag memory until the next successful save).
+
 ## Model Experience
 
 Indirectly, through dsh-tool-ia's `ia_gate` tool, which is the only model-facing surface and exposes request/list actions only.
@@ -45,6 +50,6 @@ Independent. The engine keeps no request-scoped state and registers no prompt or
 
 ## Known Limitations and Deferred Work
 
-- **In-memory decisions** — requests and decisions live for the service lifetime; the approval channel's audit events remain durable in the session log, but a persisted gate ledger is deferred.
+- **Snapshot, not a journal** — persistence is one atomic JSON snapshot per data directory (crash durability via fsync is out of scope); with `dataDir` unset, state stays in memory and the approval channel's audit events remain the only durable record.
 - **Rule release is per-service, not per-project** — A2 standard-project scoping (rules per project template) is deferred; rules apply service-wide today.
 - **No approval-policy override of always-human gates** — even a `never` approval policy leaves those gates pending; a human channel outside the approval seam must drive them.

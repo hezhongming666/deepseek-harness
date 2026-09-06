@@ -9,6 +9,7 @@
 | 键 | 含义 |
 |---|---|
 | `template` | `initProject` 默认实例化的模板：`conveyor-line`。未知名称在加载时失败。 |
+| `dataDir` | 项目状态持久化目录；默认空 = 仅内存。非空时加载期从 `<dataDir>/ia-orchestrator.json` 恢复全部项目，每次变更后原子快照。 |
 
 ## `conveyor-line` 模板
 
@@ -38,9 +39,16 @@ requirements ── design ── control-program ── simulation ── commi
 - `advance(projectId, stageId)` — 启动 `pending` 阶段；所有前驱必须已通过。
 - `submit(projectId, stageId, submission)` — 运行验证器，然后过闸/通过、修复或升级。
 - `resolveEscalation(projectId, stageId, instruction)` — 监督者路径：带着新预算与指示回到 `running`。任何面向模型工具都不暴露它。
+- `exportAudit(projectId)` — §5.4 审计包：每个阶段的机器状态加上其绑定闸门的完整请求与裁决历史。
 - `templatesList()` — 已注册模板名。
 
+当一次提交在同一次内环运行中先失败后通过时，学习管线（§4.3）把该失败-修复对沉淀为可选知识服务里的一条 `pending-review` 案例；沉淀库的重复拒绝即去重闸门，任何沉淀库故障都不阻断已通过的阶段。
+
 加载时服务对照组合好的注册表校验每个绑定的验证器种类，并注册 `release-review` 闸门——配置错误响亮失败。invariant 伴随插件在每次变更后证明阶段机：任何阶段不得先于未通过的前驱运行、尝试数不超过预算、升级阶段必带升级包、通过且绑定验证器的阶段只持有通过报告。
+
+## 持久化
+
+配置 `dataDir` 后，每次已提交的变更——项目实例化、推进、各分支的提交、升级解决，以及读取时折入的闸门裁决同步——都写一份原子版本化快照（`ia-orchestrator.json`）；全新启动恢复全部项目的阶段机、尝试数、最新报告、升级包、指示与项目 id 序号，并把每个阶段重新绑定到其模板节点。损坏或版本不符的快照在加载时失败；快照写入失败会抛错，而内存提交保留（磁盘可能落后于内存，直到下一次成功保存）。
 
 ## Model Experience
 
@@ -52,6 +60,6 @@ requirements ── design ── control-program ── simulation ── commi
 
 ## Known Limitations and Deferred Work
 
-- **内存项目** — 阶段状态重启后不持久（架构 §5.5 的持久化已延后）；会话日志记录每次工具可见的流转。
+- **快照而非日志** — 持久化是每个数据目录一份原子 JSON 快照（fsync 崩溃持久性不在范围）；未配置 `dataDir` 时阶段状态保持内存，会话日志中工具可见的流转是唯一持久记录。
 - **线性模板链** — 自定义 DAG 拓扑（并行的 hmi/电气阶段、运行闭环回灌）需要注册额外模板；目前只内置 `conveyor-line`。
 - **升级解决仅限人工** — 任何规则都不能解决升级；监督者路径是 `resolveEscalation` 服务 API。

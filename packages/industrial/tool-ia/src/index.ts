@@ -444,7 +444,7 @@ export function apply(ctx: Context, config: Config): void {
         + 'Submissions run the stage\'s deterministic verifiers first; failures return the stage to repair with the reports, and exhausting the retry budget escalates to the human supervisor with a package you must not resolve yourself. '
         + 'Stages with a bound gate stop at `gated` until a human (or a configured rule) decides; poll status to see the decision.',
       parameters: {
-        action: { type: 'string', required: true, enum: ['init', 'list', 'status', 'advance', 'submit'], description: 'The project operation.' },
+        action: { type: 'string', required: true, enum: ['init', 'list', 'status', 'advance', 'submit', 'export'], description: 'The project operation.' },
         projectId: { type: 'string', description: 'Target project id; defaults to the project this agent initialized.' },
         template: { type: 'string', description: 'Template name for init; the default is conveyor-line.' },
         stageId: { type: 'string', description: 'Stage id for advance/submit.' },
@@ -493,6 +493,10 @@ export function apply(ctx: Context, config: Config): void {
               submittedBy: authorOf(exec),
             })
             return { action: 'submit', result: toResult(stageOutput(stage)) }
+          }
+          case 'export': {
+            const audit = ctx.iaOrchestrator.exportAudit(projectOf(exec, args.projectId))
+            return Promise.resolve({ action: 'export', result: toResult(audit) })
           }
         }
       },

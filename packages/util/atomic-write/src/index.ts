@@ -7,10 +7,13 @@
  * writers of one file through a `wx`-created `<file>.lock` sibling, so a
  * read-modify-write cycle can never resurrect a state another writer just
  * replaced; readers stay lock-free because the rename commit is atomic.
+ * `readJsonSnapshot`/`writeJsonSnapshot` wrap the same discipline around
+ * versioned JSON snapshot files for load-time (synchronous) store restore.
  * @module @deepseek-ai/dsh-atomic-write
  */
 
 import { randomBytes } from 'node:crypto'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { lstat, mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
@@ -126,5 +129,81 @@ export async function withFileLock<T>(
     return await operation()
   } finally {
     await rm(lockPath, { force: true })
+  }
+}
+
+/** Render any thrown value without letting the render itself throw. */
+function renderError(error: unknown): string {
+  try {
+    return String(error instanceof Error ? error.message : error)
+  } catch {
+    return '[unrenderable thrown value]'
+  }
+}
+
+/**
+ * Read one versioned JSON snapshot file synchronously — the load-time restore
+ * path for services whose Cordis constructors cannot await IO.
+ * @param file - the snapshot path.
+ * @param expectedVersion - the format version this reader understands.
+ * @returns the stored state, or `undefined` when the file does not exist yet
+ *   (a fresh store).
+ * @throws when the file is unreadable, malformed JSON, not a versioned record,
+ *   or carries a different format version — a store never silently degrades.
+ */
+export function readJsonSnapshot(file: string, expectedVersion: number): unknown {
+  if (!existsSync(file)) return undefined
+  let raw: string
+  try {
+    raw = readFileSync(file, 'utf8')
+  } catch (error) {
+    throw new Error(`atomic-write: cannot read snapshot ${file}: ${renderError(error)}`)
+  }
+  let value: unknown
+  try {
+    value = JSON.parse(raw)
+  } catch (error) {
+    throw new Error(`atomic-write: snapshot ${file} is malformed JSON: ${renderError(error)}`)
+  }
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error(`atomic-write: snapshot ${file} must hold a versioned record object`)
+  }
+  const record = value as { version?: unknown; state?: unknown }
+  if (record.version !== expectedVersion) {
+    throw new Error(
+      `atomic-write: snapshot ${file} has format version ${JSON.stringify(record.version)}, expected ${expectedVersion}`,
+    )
+  }
+  return record.state
+}
+
+/**
+ * Write one versioned JSON snapshot file, replacing the previous snapshot in
+ * one synchronous atomic step: exclusive-create temp sibling, then rename
+ * over the target. Parent directories are created with owner-only
+ * permissions; the fresh inode carries `0o600`. Crash durability (fsync) is
+ * out of scope, matching {@link writeFileAtomic}.
+ * @param file - the snapshot path.
+ * @param version - the format version stamped on the record.
+ * @param state - the complete next store state, JSON-serializable.
+ */
+export function writeJsonSnapshot(file: string, version: number, state: unknown): void {
+  try {
+    mkdirSync(dirname(file), { recursive: true, mode: 0o700 })
+  } catch (error) {
+    throw new Error(`atomic-write: cannot create the snapshot directory for ${file}: ${renderError(error)}`)
+  }
+  const temp = `${file}.${randomBytes(6).toString('hex')}.tmp`
+  try {
+    writeFileSync(temp, `${JSON.stringify({ version, state })}\n`, { mode: 0o600, flag: 'wx' })
+    renameSync(temp, file)
+  } catch (error) {
+    try {
+      rmSync(temp, { force: true })
+    } catch {
+      // Swallow the cleanup failure: the leftover temp is inert, and the
+      // original write failure below stays authoritative.
+    }
+    throw new Error(`atomic-write: cannot write snapshot ${file}: ${renderError(error)}`)
   }
 }

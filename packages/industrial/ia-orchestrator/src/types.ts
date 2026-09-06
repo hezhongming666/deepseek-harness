@@ -5,7 +5,7 @@
  */
 
 import type { Branded } from '@deepseek-ai/dsh-brand'
-import type { GateId } from '@deepseek-ai/dsh-ia-gates'
+import type { GateId, GateRequest } from '@deepseek-ai/dsh-ia-gates'
 import type { VerificationReport } from '@deepseek-ai/dsh-ia-verifier'
 
 /** Opaque id of one orchestrated project. */
@@ -110,6 +110,48 @@ export interface StageSnapshot {
   escalation?: EscalationPackage
   /** A human rework instruction, present after an escalation resolution. */
   instruction?: string
+}
+
+/**
+ * The per-project audit package (§5.4): the complete evidence chain of one
+ * project — every stage's machine state plus the full request-and-decision
+ * history of its bound gate — assembled for export, review, or archival.
+ */
+export interface AuditPackage {
+  /** The exported project id. */
+  projectId: ProjectId
+  /** The project template name. */
+  template: string
+  /** Epoch milliseconds when the package was assembled. */
+  exportedAt: number
+  /** One record per stage, in template order. */
+  stages: AuditStageRecord[]
+}
+
+/** One stage's record inside an {@link AuditPackage}. */
+export interface AuditStageRecord {
+  /** The template stage id. */
+  stageId: StageId
+  /** Human-readable stage title. */
+  title: string
+  /** Current lifecycle state. */
+  state: StageState
+  /** Failing submissions so far in the current run. */
+  attempts: number
+  /** The inner-loop ceiling. */
+  maxRetries: number
+  /** Verifier kinds bound to the stage. */
+  verifiers: string[]
+  /** The bound gate, when one exists. */
+  gate?: GateId
+  /** Latest verification reports, present after at least one submission. */
+  reports?: VerificationReport[]
+  /** The escalation package, present while `escalated`. */
+  escalation?: EscalationPackage
+  /** A human rework instruction, present after an escalation resolution. */
+  instruction?: string
+  /** The bound gate's full request history with decisions; empty without a gate. */
+  gateRequests: GateRequest[]
 }
 
 /**

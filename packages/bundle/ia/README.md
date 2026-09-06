@@ -23,7 +23,7 @@ dsh web --patch examples/industrial-ia/cordis.yml
 | `ia-orchestrator` | `@deepseek-ai/dsh-ia-orchestrator` |
 | `tool-ia` | `@deepseek-ai/dsh-tool-ia` |
 
-Deployments raise the automation level to `A2` and register auto-release rules by patching the `ia-gates` row; the always-human gates never change with the level. The real-vendor compile verifier `@deepseek-ai/dsh-ia-verifier-openness` is deliberately not bundled: its bridge `url` is deployment-owned and required, so sites with a TIA Portal Openness bridge mount it through a profile patch or the `examples/industrial-ia/cordis.openness.yml` overlay.
+Deployments raise the automation level to `A2` and register auto-release rules by patching the `ia-gates` row; the always-human gates never change with the level. The real-vendor compile verifier `@deepseek-ai/dsh-ia-verifier-openness` is deliberately not bundled: its bridge `url` is deployment-owned and required, so sites with a TIA Portal Openness bridge mount it through a profile patch or the `examples/industrial-ia/cordis.openness.yml` overlay. Industrial state persists across restarts only when each stateful service gets a `dataDir` config override (`ia-gates` / `ia-trace` / `ia-knowledge` / `ia-orchestrator`); the bundle ships them in-memory by default.
 
 ## Model Experience
 

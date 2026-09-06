@@ -148,6 +148,27 @@ const BASE_ROWS = [
   '',
 ]
 
+/** The base rows with per-service snapshot dataDirs under one root directory. */
+function baseRows(dataDir, level) {
+  if (dataDir === undefined) return BASE_ROWS
+  const rows = ["- name: '@deepseek-ai/dsh-ia-verifier'"]
+  for (const id of ['ia-gates', 'ia-trace', 'ia-knowledge', 'ia-orchestrator']) {
+    const config = level === undefined
+      ? [`    dataDir: ${join(dataDir, id.slice(3))}`]
+      : id === 'ia-gates'
+        ? ['    level: A2', `    dataDir: ${join(dataDir, id.slice(3))}`]
+        : [`    dataDir: ${join(dataDir, id.slice(3))}`]
+    rows.push(`- name: '@deepseek-ai/dsh-${id}'`, '  config:', ...config)
+  }
+  rows.push(
+    "- name: '@deepseek-ai/dsh-system-prompt'",
+    "- name: '@deepseek-ai/dsh-tools'",
+    "- name: '@deepseek-ai/dsh-tool-ia'",
+    '',
+  )
+  return rows
+}
+
 async function main() {
   {
     const { ctx, root } = await boot(BASE_ROWS)
@@ -257,6 +278,47 @@ async function main() {
       await ctx.fiber.dispose()
       await rm(root, { recursive: true, force: true })
       await bridge.close()
+    }
+  }
+
+  {
+    // Persistence round-trip over the assembled composition: state written in
+    // one boot must survive a fresh boot against the same data directories.
+    const data = await mkdtemp(join(tmpdir(), 'dsh-ia-smoke-data-'))
+    const first = await boot(baseRows(data, 'A2'))
+    let restored = undefined
+    try {
+      // The A2 auto-release rule decides through the real service path, so
+      // the decision itself is what persistence must restore.
+      first.ctx.iaGates.registerAutoReleaseRule('smoke-rule', 'requirement-baseline', () => true)
+      const project = await call(first.ctx, 'ia_project', { action: 'init' })
+      const projectId = project.value?.result?.id
+      await call(first.ctx, 'ia_project', { action: 'submit', projectId, stageId: 'requirements', text: '持久化需求' })
+      first.ctx.iaOrchestrator.project(projectId)
+      await call(first.ctx, 'ia_knowledge', {
+        action: 'record', library: 'cases', title: '持久化探针案例', content: 'restart round-trip probe',
+        source: 'smoke', version: 'v1',
+      })
+      first.ctx.iaTrace.project('smoke-scope').addNode({ kind: 'requirement', title: 'R-持久化', author: 'smoke' })
+      await first.ctx.fiber.dispose()
+      await rm(first.root, { recursive: true, force: true })
+
+      restored = await boot(baseRows(data, 'A2'))
+      check('restart restores the orchestrator project with its gate decision',
+        restored.ctx.iaOrchestrator.projectsList().some(entry => String(entry.id) === projectId)
+        && restored.ctx.iaOrchestrator.project(projectId).stages.find(entry => entry.id === 'requirements').state === 'passed')
+      check('restart restores the gate decision history',
+        restored.ctx.iaGates.latestDecision('requirement-baseline')?.outcome === 'approved'
+        && restored.ctx.iaGates.latestDecision('requirement-baseline')?.decider === 'rule:smoke-rule')
+      check('restart restores knowledge entries',
+        restored.ctx.iaKnowledge.search('cases', 'restart').hits.length === 1)
+      check('restart restores the scoped trace graph',
+        restored.ctx.iaTrace.hasProject('smoke-scope')
+        && restored.ctx.iaTrace.project('smoke-scope').nodesList().length === 1)
+    } finally {
+      await restored?.ctx.fiber.dispose()
+      if (restored?.root !== undefined) await rm(restored.root, { recursive: true, force: true })
+      await rm(data, { recursive: true, force: true })
     }
   }
 

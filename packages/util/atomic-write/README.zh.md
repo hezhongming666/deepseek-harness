@@ -7,7 +7,7 @@
 ## 接口面
 
 ```ts
-import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
+import { readJsonSnapshot, withFileLock, writeFileAtomic, writeJsonSnapshot } from '@deepseek-ai/dsh-atomic-write'
 
 declare const text: string
 declare const render: (previous: string) => string
@@ -18,6 +18,12 @@ await writeFileAtomic('/home/u/.dsh/settings.yaml', text, { mode: 0o600 })
 await withFileLock('/home/u/.dsh/settings.yaml', async () => {
   await writeFileAtomic('/home/u/.dsh/settings.yaml', render(text), { mode: 0o600 })
 })
+
+// Versioned JSON snapshots for synchronous load-time restore: the read
+// returns `undefined` for a fresh store and fails loud on version drift or
+// malformed content; the write replaces the snapshot in one atomic step.
+const state = readJsonSnapshot('/home/u/.dsh/store.json', 1)
+writeJsonSnapshot('/home/u/.dsh/store.json', 1, { entries: ['a'] })
 ```
 
 `writeFileAtomic` 提交一份已经渲染好的字符串。约定按故障利用它的先后顺序列出：
@@ -29,6 +35,8 @@ await withFileLock('/home/u/.dsh/settings.yaml', async () => {
 - 自动创建父目录；任何失败都会移除临时文件并重新抛出该失败；读取方只会观察到旧内容或完整的新内容。
 
 `withFileLock` 跨进程串行化同一文件的写入方，服务于单靠原子提交无法保证安全的读-渲染-提交循环。锁是以 `wx` 创建的同目录 `<filename>.lock`，因此读取方从不参与竞争；等待方按指数退避，超时即失败而非无限阻塞。`EEXIST` 直接表示竞争；只有一次新的 `lstat` 确认锁路径存在时，`EPERM` 才表示竞争，从而兼容 Windows 的独占创建行为，又不掩盖无关的权限故障。竞争者绝不移除现有锁：锁龄无法区分已经崩溃的所有者与被暂停但仍存活的写入方。
+
+`readJsonSnapshot`/`writeJsonSnapshot` 把同样的替换纪律带入同步、版本化的 JSON 快照文件：写入以 `0o700` 创建父目录，用 `0o600` 独占创建临时文件并 rename 覆盖目标；读取把缺失文件视为全新存储，对不可读、畸形、非记录或版本不符的内容一律抛错并点名文件。
 
 ## 模型体验
 

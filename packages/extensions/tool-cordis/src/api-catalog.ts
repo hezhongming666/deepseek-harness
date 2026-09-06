@@ -952,6 +952,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'all instantiated projects, snapshotted with synced gate decisions.',
       },
       {
+        signature: 'exportAudit(projectId: ProjectId): AuditPackage',
+        description: 'Assemble the project\'s audit package (§5.4): every stage\'s machine state plus the complete request-and-decision history of its bound gate. The package is deliberately complete — it is the evidence chain for export, review, or archival, not a bounded UI projection.',
+        parameters: [{ name: 'projectId', description: 'the project to export.' }],
+        returns: 'the assembled audit package.',
+      },
+      {
         signature: 'advance(projectId: ProjectId, stageId: StageId): ProjectSnapshot',
         description: 'Start a `pending` stage; every predecessor stage must have passed.',
         parameters: [{ name: 'projectId', description: 'the owning project.' }, { name: 'stageId', description: 'the stage to start.' }],
@@ -3115,6 +3121,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type AttachmentId = Branded<\'AttachmentId\'>;',
   },
   {
+    name: 'AuditPackage',
+    declaration: 'export interface AuditPackage {\n    projectId: ProjectId;\n    template: string;\n    exportedAt: number;\n    stages: AuditStageRecord[];\n}',
+  },
+  {
+    name: 'AuditStageRecord',
+    declaration: 'export interface AuditStageRecord {\n    stageId: StageId;\n    title: string;\n    state: StageState;\n    attempts: number;\n    maxRetries: number;\n    verifiers: string[];\n    gate?: GateId;\n    reports?: VerificationReport[];\n    escalation?: EscalationPackage;\n    instruction?: string;\n    gateRequests: GateRequest[];\n}',
+  },
+  {
     name: 'AutomationLevel',
     declaration: 'export type AutomationLevel = \'A0\' | \'A1\' | \'A2\' | \'A3\';',
   },
@@ -5084,7 +5098,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'TraceProject',
-    declaration: 'export class TraceProject {\n    addNode(input: AddNodeInput): TraceNode;\n    addLink(from: TraceNodeId, to: TraceNodeId, kind: TraceLinkKind): TraceLink;\n    recordChange(input: RecordChangeInput): {\n        record: ChangeRecord;\n        impact: ImpactAnalysis;\n    };\n    nodesList(): TraceNode[];\n    linksList(): TraceLink[];\n    changesList(): ChangeRecord[];\n    node(id: TraceNodeId): TraceNode | undefined;\n    impactOf(nodeIds: readonly TraceNodeId[]): ImpactAnalysis;\n    matrix(): MatrixRow[];\n    onMutate(listener: (project: TraceProject) => void): () => void;\n}',
+    declaration: 'export class TraceProject {\n    addNode(input: AddNodeInput): TraceNode;\n    addLink(from: TraceNodeId, to: TraceNodeId, kind: TraceLinkKind): TraceLink;\n    recordChange(input: RecordChangeInput): {\n        record: ChangeRecord;\n        impact: ImpactAnalysis;\n    };\n    nodesList(): TraceNode[];\n    linksList(): TraceLink[];\n    changesList(): ChangeRecord[];\n    node(id: TraceNodeId): TraceNode | undefined;\n    impactOf(nodeIds: readonly TraceNodeId[]): ImpactAnalysis;\n    matrix(): MatrixRow[];\n    onMutate(listener: (project: TraceProject) => void): () => void;\n    snapshotState(): Omit<TraceProjectState, \'scope\'>;\n    static restore(state: Omit<TraceProjectState, \'scope\'>): TraceProject;\n}',
+  },
+  {
+    name: 'TraceProjectState',
+    declaration: 'export interface TraceProjectState {\n    scope: string;\n    ordinal: number;\n    nodes: TraceNode[];\n    links: TraceLink[];\n    changes: ChangeRecord[];\n}',
   },
   {
     name: 'TurnEndCancelCause',

@@ -241,6 +241,8 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   AdapterRegistrationHandle: 'llm-streaming.md',
   DirectoryRegistrationHandle: 'llm-streaming.md',
   AutomationLevel: 'industrial.md',
+  AuditPackage: 'industrial.md',
+  AuditStageRecord: 'industrial.md',
   AutoReleaseRule: 'industrial.md',
   ChangeRecord: 'industrial.md',
   EscalationPackage: 'industrial.md',
