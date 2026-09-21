@@ -6,11 +6,11 @@ English | [中文](2026-08-19-direct-deepseek-vision-input.zh.md)
 
 ## Problem
 
-DeepSeek vision deployments use the chat-completions image protocol, but the direct `deepseek-official` adapter declares every catalog and pass-through model text-only and rejects every `ImageBlock`. The durable attachment path therefore works only through configurable pi-ai routes, and a deployment cannot pass user uploads or image-bearing tool results through the direct provider.
+DeepSeek vision deployments use the chat-completions image protocol, but the direct `deepseek-official` adapter declares catalog and pass-through models text-only unless configured with `inputModalities: [text, image]`, and rejects every `ImageBlock` for text-only models. A deployment therefore cannot pass user uploads or image-bearing tool results through the direct provider without enabling a vision-capable model.
 
 ## Decision
 
-The direct adapter lets a configured model opt in with `inputModalities: [text, image]`; validation rejects empty, unknown, or duplicate modalities. Flash, Pro, unlisted ids, and configured models that omit `inputModalities` remain explicitly text-only. The shipped catalog does not advertise `deepseek-v4-flash-vision-exp` until its model endpoint is ready, so the model selector cannot offer an unavailable route; deployment and snapshot catalogs can enable their exact vision model independently.
+The direct adapter lets a configured model opt in with `inputModalities: [text, image]`; validation rejects empty, unknown, or duplicate modalities. The shipped catalog advertises `deepseek-flash` (DeepSeek-V4.1-Flash) with vision by default; `deepseek-v4-pro`, unlisted ids, and configured models that omit `inputModalities` remain explicitly text-only. The shipped catalog does not advertise the retired `deepseek-v4-flash-vision-exp` endpoint, so the model selector cannot offer an unavailable route; deployment and snapshot catalogs can enable their exact vision model independently.
 
 The adapter resolves `ctx.attachments` per image request, reads each retained durable reference with the request signal, and serializes verified bytes as ordered OpenAI-compatible `image_url` data URLs. Text-only user messages retain string content. Tool results retain string-only `tool` messages; image-only results use `(see attached image)`, and consecutive retained tool-result images follow in one `user` message beginning `Attached image(s) from tool result:`. System and assistant history images fail with `UNSUPPORTED_CONTENT` before attachment or network I/O.
 

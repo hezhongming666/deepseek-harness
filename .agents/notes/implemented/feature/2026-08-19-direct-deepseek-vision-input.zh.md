@@ -6,11 +6,11 @@ Status: implemented
 
 ## Problem
 
-DeepSeek 视觉部署使用 chat-completions 图片协议，但直接 `deepseek-official` 适配器把所有 catalog 与原样传递模型都声明为仅文本，并拒绝每一个 `ImageBlock`。因此，持久附件路径只能经可配置 pi-ai 路由工作，部署方无法通过直接提供方传递用户上传或包含图片的工具结果。
+DeepSeek 视觉部署使用 chat-completions 图片协议，但直接 `deepseek-official` 适配器会把 catalog 与原样传递模型声明为仅文本，除非配置 `inputModalities: [text, image]`，并拒绝每一个针对仅文本模型的 `ImageBlock`。因此，若不启用视觉能力模型，部署方就无法通过直接提供方传递用户上传或包含图片的工具结果。
 
 ## Decision
 
-直接适配器允许已配置模型通过 `inputModalities: [text, image]` 选择加入；校验会拒绝空列表、未知模态或重复模态。Flash、Pro、未列出 id，以及省略 `inputModalities` 的已配置模型仍明确仅支持文本。在模型端点就绪前，随附目录不会公布 `deepseek-v4-flash-vision-exp`，因此模型选择器不会提供不可用路由；部署与 snapshot 目录可以独立启用其确切视觉模型。
+直接适配器允许已配置模型通过 `inputModalities: [text, image]` 选择加入；校验会拒绝空列表、未知模态或重复模态。随附目录默认公布带视觉的 `deepseek-flash`（DeepSeek-V4.1-Flash）；`deepseek-v4-pro`、未列出 id，以及省略 `inputModalities` 的已配置模型仍明确仅支持文本。随附目录不会公布已退役的 `deepseek-v4-flash-vision-exp` 端点，因此模型选择器不会提供不可用路由；部署与 snapshot 目录可以独立启用其确切视觉模型。
 
 适配器会对每个图片请求解析 `ctx.attachments`，用请求 signal 读取每个保留的持久引用，并将校验后的字节按顺序序列化为 OpenAI 兼容的 `image_url` data URL。纯文本 user 消息保留字符串内容。工具结果保留仅字符串的 `tool` 消息；仅含图片的结果使用 `(see attached image)`，连续工具结果中保留的图片随后合并进一条以 `Attached image(s) from tool result:` 开头的 `user` 消息。System 与 assistant 历史图片会在附件或网络 I/O 前以 `UNSUPPORTED_CONTENT` 失败。
 
