@@ -91,6 +91,206 @@ function impactOutput(impact: { changed: unknown[]; direct: unknown[]; indirect:
   }
 }
 
+/** One deterministic text content block from joined lines. */
+function textBlock(lines: string[]): { type: 'text'; text: string }[] {
+  return [{ type: 'text', text: lines.join('\n') }]
+}
+
+/** Read one scalar field of a JSON digest as text. */
+function fieldText(record: Record<string, JsonValue>, field: string, fallback = ''): string {
+  const value = record[field]
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  return fallback
+}
+
+/** Join the string members of one JSON array field. */
+function fieldList(value: JsonValue | undefined): string {
+  if (!Array.isArray(value)) return ''
+  return value.filter((item): item is string => typeof item === 'string').join(', ')
+}
+
+/** Join the `id` members of one JSON array of node digests. */
+function fieldIdList(value: JsonValue | undefined): string {
+  if (!Array.isArray(value)) return ''
+  const ids: string[] = []
+  for (const item of value) {
+    if (typeof item === 'object' && item !== null) ids.push(fieldText(item as Record<string, JsonValue>, 'id'))
+  }
+  return ids.filter(id => id.length > 0).join(', ')
+}
+
+/** Render one `ia_trace` canonical value: node ids, links, impact, and matrix. */
+function traceRender(value: { action: string; result: Record<string, JsonValue> }): { type: 'text'; text: string }[] {
+  const result = value.result
+  switch (value.action) {
+    case 'record':
+      return textBlock([`Trace ${fieldText(result, 'kind')} recorded: ${fieldText(result, 'id')} — ${fieldText(result, 'title')}`])
+    case 'link':
+      return textBlock([`Trace link: ${fieldText(result, 'from')} -${fieldText(result, 'kind')}-> ${fieldText(result, 'to')}`])
+    case 'change':
+    case 'impact': {
+      const digest = (value.action === 'change' ? result['impact'] ?? {} : result) as Record<string, JsonValue>
+      return textBlock([`Trace ${value.action}: changed=[${fieldList(digest['changed'])}] direct=[${fieldList(digest['direct'])}] indirect=[${fieldList(digest['indirect'])}] potential=[${fieldList(digest['potential'])}]`])
+    }
+    case 'matrix': {
+      const rows = result['rows']
+      if (!Array.isArray(rows) || rows.length === 0) return textBlock(['Trace matrix: no requirements recorded.'])
+      const lines = ['Trace matrix:']
+      for (const rowValue of rows) {
+        const row = rowValue as Record<string, JsonValue>
+        const requirement = (row['requirement'] ?? {}) as Record<string, JsonValue>
+        lines.push(`- ${fieldText(requirement, 'id')} ${fieldText(requirement, 'title')}: implementations=[${fieldIdList(row['implementations'])}] tests=[${fieldIdList(row['tests'])}] covered=${row['covered'] === true}`)
+      }
+      return textBlock(lines)
+    }
+    default:
+      return textBlock([`Trace ${value.action}: unhandled render action`])
+  }
+}
+
+/** Render one `ia_gate` canonical value: the gate list or one request outcome. */
+function gateRender(value: { action: string; result: Record<string, JsonValue> }): { type: 'text'; text: string }[] {
+  const result = value.result
+  if (value.action === 'list') {
+    const gates = result['gates']
+    if (!Array.isArray(gates) || gates.length === 0) return textBlock(['Gates: none registered.'])
+    const lines = ['Gates:']
+    for (const gateValue of gates) {
+      const gate = gateValue as Record<string, JsonValue>
+      const latest = gate['latestDecision']
+      const latestText = typeof latest === 'object' && latest !== null
+        ? fieldText(latest as Record<string, JsonValue>, 'outcome')
+        : 'none'
+      const human = gate['alwaysHuman'] === true ? ' [always-human]' : ''
+      lines.push(`- ${fieldText(gate, 'id')}${human}: ${fieldText(gate, 'title')} | pending=${fieldText(gate, 'pendingRequests', '0')} | latest=${latestText}`)
+    }
+    return textBlock(lines)
+  }
+  const decided = result['decided'] === true
+  const outcome = fieldText(result, 'outcome', 'pending')
+  const decider = fieldText(result, 'decider')
+  const note = fieldText(result, 'note')
+  return textBlock([`Gate ${fieldText(result, 'gateId')}: ${decided ? outcome + (decider ? ` by ${decider}` : '') : 'pending'}${note ? ` — ${note}` : ''}`])
+}
+
+/** Render one `ia_knowledge` canonical value: hits with citations, records, readiness. */
+function knowledgeRender(value: { action: string; result: Record<string, JsonValue> }): { type: 'text'; text: string }[] {
+  const result = value.result
+  switch (value.action) {
+    case 'search': {
+      const hits = result['hits']
+      const hitCount = Array.isArray(hits) ? hits.length : 0
+      const lines = [`Knowledge search: ${hitCount} hit(s)${result['degraded'] === true ? ' — degraded: libraries below cold-start minimum' : ''}`]
+      if (Array.isArray(hits)) {
+        for (const hitValue of hits) {
+          const hit = hitValue as Record<string, JsonValue>
+          const entry = (hit['entry'] ?? {}) as Record<string, JsonValue>
+          const matched = fieldList(hit['matchedTerms'])
+          lines.push(`- ${fieldText(entry, 'id')} [${fieldText(entry, 'library')}] ${fieldText(entry, 'title')} — source: ${fieldText(entry, 'source')} version: ${fieldText(entry, 'version')} (${fieldText(entry, 'reviewStatus')})${matched ? `; matched: ${matched}` : ''}`)
+        }
+      }
+      return textBlock(lines)
+    }
+    case 'record':
+      return textBlock([`Knowledge recorded: ${fieldText(result, 'id')} (${fieldText(result, 'reviewStatus')})`])
+    case 'readiness': {
+      const counts = (result['counts'] ?? {}) as Record<string, JsonValue>
+      const lines = [`Knowledge readiness: ${result['ready'] === true ? 'ready' : 'not ready'} | cases=${fieldText(counts, 'cases', '0')} standards=${fieldText(counts, 'standards', '0')} templates=${fieldText(counts, 'templates', '0')}`]
+      const gaps = result['gaps']
+      if (Array.isArray(gaps)) {
+        for (const gapValue of gaps) {
+          const gap = gapValue as Record<string, JsonValue>
+          lines.push(`- gap ${fieldText(gap, 'library')}: have ${fieldText(gap, 'have', '0')} / need ${fieldText(gap, 'need', '0')}`)
+        }
+      }
+      return textBlock(lines)
+    }
+    default:
+      return textBlock([`Knowledge ${value.action}: unhandled render action`])
+  }
+}
+
+/** Render one project stage digest as one status line. */
+function projectStageLine(stage: Record<string, JsonValue>): string {
+  const parts = [`- ${fieldText(stage, 'id')} [${fieldText(stage, 'state')}] attempts=${fieldText(stage, 'attempts', '0')}/${fieldText(stage, 'maxRetries', '0')}`]
+  const verifiers = fieldList(stage['verifiers'])
+  parts.push(`verifiers=${verifiers || 'none'}`)
+  const gate = fieldText(stage, 'gate')
+  if (gate) {
+    const gateStatus = fieldText(stage, 'gateStatus')
+    parts.push(`gate=${gate}${gateStatus ? `(${gateStatus})` : ''}`)
+  }
+  const reports = stage['reports']
+  if (Array.isArray(reports) && reports.length > 0) {
+    parts.push(`reports=${reports.map((report) => {
+      const digest = report as Record<string, JsonValue>
+      return `${fieldText(digest, 'kind')}:${digest['pass'] === true ? 'pass' : 'fail'}`
+    }).join(',')}`)
+  }
+  const escalation = stage['escalation']
+  if (typeof escalation === 'object' && escalation !== null) {
+    parts.push(`escalated: ${fieldText(escalation as Record<string, JsonValue>, 'failureSummary')}`)
+  }
+  const instruction = fieldText(stage, 'instruction')
+  if (instruction) parts.push(`instruction: ${instruction}`)
+  return parts.join(' ')
+}
+
+/** Render one `ia_project` canonical value: projects, snapshots, stage verdicts, audits. */
+function projectRender(value: { action: string; result: Record<string, JsonValue> }): { type: 'text'; text: string }[] {
+  const result = value.result
+  switch (value.action) {
+    case 'list': {
+      const projects = result['projects']
+      if (!Array.isArray(projects) || projects.length === 0) return textBlock(['Projects: none.'])
+      const lines = ['Projects:']
+      for (const projectValue of projects) {
+        const project = projectValue as Record<string, JsonValue>
+        lines.push(`- ${fieldText(project, 'id')} (${fieldText(project, 'template')})`)
+      }
+      return textBlock(lines)
+    }
+    case 'submit':
+      return textBlock(['Project stage:', projectStageLine(result)])
+    case 'export': {
+      const stages = result['stages']
+      const lines = [`Audit exported: project=${fieldText(result, 'projectId')} (${fieldText(result, 'template')})`]
+      if (Array.isArray(stages)) {
+        for (const stageValue of stages) {
+          const stage = stageValue as Record<string, JsonValue>
+          const requests = stage['gateRequests']
+          const decisions = Array.isArray(requests)
+            ? requests.map((requestValue) => {
+              const decision = (requestValue as Record<string, JsonValue>)['decision']
+              return typeof decision === 'object' && decision !== null
+                ? fieldText(decision as Record<string, JsonValue>, 'outcome')
+                : 'pending'
+            }).join(',')
+            : ''
+          lines.push(`- ${fieldText(stage, 'stageId')} [${fieldText(stage, 'state')}] attempts=${fieldText(stage, 'attempts', '0')}/${fieldText(stage, 'maxRetries', '0')}${decisions ? ` gate=${decisions}` : ''}`)
+        }
+      }
+      return textBlock(lines)
+    }
+    default: {
+      const stages = result['stages']
+      const lines = [`Project ${fieldText(result, 'id')} (${fieldText(result, 'template')}):`]
+      if (Array.isArray(stages)) {
+        for (const stageValue of stages) lines.push(projectStageLine(stageValue as Record<string, JsonValue>))
+      }
+      const instructions = result['instructions']
+      if (Array.isArray(instructions)) {
+        for (const item of instructions) {
+          const digest = item as Record<string, JsonValue>
+          lines.push(`instruction for ${fieldText(digest, 'stageId')}: ${fieldText(digest, 'instruction')}`)
+        }
+      }
+      return textBlock(lines)
+    }
+  }
+}
+
 /**
  * Downcast one plain JSON object to the tool-result record the registry's
  * output schema demands; runtime validation still rejects non-JSON values.
@@ -239,7 +439,7 @@ export function apply(ctx: Context, config: Config): void {
             result: { type: 'object', required: true, additionalProperties: true },
           },
         },
-        render: (_args, value) => [{ type: 'text', text: `ia_trace ${value.action}: done.` }],
+        render: (_args, value) => traceRender(value),
       },
       execute(args, exec) {
         const project = ctx.iaTrace.project(traceScopeOf(exec))
@@ -321,7 +521,7 @@ export function apply(ctx: Context, config: Config): void {
             result: { type: 'object', required: true, additionalProperties: true },
           },
         },
-        render: (_args, value) => [{ type: 'text', text: `ia_gate ${value.action}: done.` }],
+        render: (_args, value) => gateRender(value),
       },
       async execute(args, exec) {
         if (args.action === 'list') {
@@ -401,7 +601,7 @@ export function apply(ctx: Context, config: Config): void {
             result: { type: 'object', required: true, additionalProperties: true },
           },
         },
-        render: (_args, value) => [{ type: 'text', text: `ia_knowledge ${value.action}: done.` }],
+        render: (_args, value) => knowledgeRender(value),
       },
       execute(args, exec) {
         switch (args.action) {
@@ -461,7 +661,7 @@ export function apply(ctx: Context, config: Config): void {
             result: { type: 'object', required: true, additionalProperties: true },
           },
         },
-        render: (_args, value) => [{ type: 'text', text: `ia_project ${value.action}: done.` }],
+        render: (_args, value) => projectRender(value),
       },
       async execute(args, exec) {
         switch (args.action) {
